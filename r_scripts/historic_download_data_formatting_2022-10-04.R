@@ -104,6 +104,7 @@ f2_formatted <- hist_form2 %>%
   mutate(date_time_gmt = mdy_hms(paste0(date_gmt, " ", time_gmt)),
          collar_id=as.character(collar_id))%>% 
   select(animal_id,
+         collar_id,
          date_time_gmt,
          latitude:back_v) %>% 
   relocate(dop, .after = altitude_m) %>% 
@@ -222,7 +223,7 @@ get_dupes(hist_combined, animal_id, date_time_gmt) #no_dupes, we good
 #check deployments
 unique(hist_combined$deployment_id)
 
-write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-11-06.csv")
+#write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-11-06.csv")
 
 
 
