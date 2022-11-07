@@ -24,7 +24,7 @@ vec_web <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar
 retrieved <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/retrieved_collars_final_2022-10-05.csv") %>% 
   mutate(collar_id=as.character(collar_id))
 
-historic <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-10-17.csv") %>% 
+historic <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-11-06.csv") %>% 
   mutate(sats_used =  str_replace_all(sats_used, "N/A", NA_character_),
          sats_used = as.numeric(sats_used)) %>% 
   mutate(deployment_id= str_replace_all(deployment_id, "Tswift_38019", "TSwift_38019")) %>% 
@@ -94,7 +94,7 @@ all_locations_trimmed <- bind_rows(trimmed_deployments)
 #trimming removed 193 locations (probably all from historic downloads....but should there be that many?)
 
 
-#write_csv(all_locations_trimmed, "data/Location Data/Source Files/all_locations_trimmed_2022-10-18.csv")
+#write_csv(all_locations_trimmed, "data/Location Data/Source Files/all_locations_trimmed_2022-11-06.csv")
 
 
 
