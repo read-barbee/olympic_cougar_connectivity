@@ -5,6 +5,8 @@
 
 #Date: 2022-10-03
 
+#Updated: 11-06-2022: fixed date-time issue for historic downloads where time was excluded
+
 #Purpose: Filter for collared dates and combine and format files from retrieved collar downloads. Get everything into Movebank format.
 
 library(tidyverse)
@@ -96,11 +98,14 @@ f1_formatted <- hist_form1 %>%
 
 f2_formatted <- hist_form2 %>%
   clean_names() %>%
-  select(animal_id:date_time_gmt, latitude:back_v) %>% 
+  select(animal_id:time_gmt, latitude:back_v) %>% 
   rename(altitude_m = altitude,
          fix_type = fix_status) %>% 
-  mutate(date_time_gmt = mdy(date_time_gmt),
+  mutate(date_time_gmt = mdy_hms(paste0(date_gmt, " ", time_gmt)),
          collar_id=as.character(collar_id))%>% 
+  select(animal_id,
+         date_time_gmt,
+         latitude:back_v) %>% 
   relocate(dop, .after = altitude_m) %>% 
   replace_with_na(replace = list(fix_type ="0")) 
 
@@ -212,11 +217,12 @@ hist_combined <- hist_combined %>%
   mutate(deployment_id = paste0(animal_id,"_",collar_id)) %>% 
   select(deployment_id, everything())
 
+get_dupes(hist_combined, animal_id, date_time_gmt) #no_dupes, we good
 
 #check deployments
 unique(hist_combined$deployment_id)
 
-#write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-10-17.csv")
+write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-11-06.csv")
 
 
 
