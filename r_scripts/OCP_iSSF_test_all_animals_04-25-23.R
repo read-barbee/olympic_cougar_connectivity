@@ -101,6 +101,39 @@ summary(sampling_rates)
 #the largest minimum fix interval across all individuals is 4 hours
 
 
+################################ Identify optimum resampling interval #################################
+
+#function to calculate bursts for each individual---increment by hours to find optimum
+test_fun1 <- function(x) {
+  x %>% 
+    amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
+    amt::filter_min_n_burst() #divide into bursts of min 3 pts
+}
+
+locs_nested_test <- locs_nested
+
+locs_nested_test$steps <- map(locs_nested$tracks, test_fun1)
+
+
+locs_nested_test %>% 
+  filter(nrow(steps)==0) %>% 
+  select(steps) %>% View()
+
+indiv_to_remove <- locs_nested_test %>% 
+  filter(nrow(steps)==0) %>% 
+  pull(animal_id)
+
+
+#1 hour removes 69 individuals (n=40)
+#2 hour removes 32 individuals (n=77)
+#3 hours removes 32 individuals (n=77)
+#4 hours removes 33 individuals (n=76)
+#5 hours removes 63 individuals (n=46)
+#6 hours removes 8 individuals (n=101)
+
+#6 hours retains the most individuals
+
+
 ################################ Resample Tracks/Generate Steps #################################
 
 steps_6h <- function(x) {
@@ -112,47 +145,67 @@ steps_6h <- function(x) {
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
 }
 
-#### By Mean: Only retains 63 individuals ###
+amt_locs <- locs_nested %>% 
+  filter(!(animal_id %in% indiv_to_remove)) %>% 
+  filter(animal_id != "Cato")
 
-#filter sampling rate summary frame to get vector of individual names to resample
-indiv_for_resampling <- sampling_rates %>% 
-  mutate(mean=round(mean, digits = 0)) %>% 
-  filter(mean %in% c(1, 2, 3, 6)) %>% 
-  pull(animal_id)
+amt_locs$steps <- map(amt_locs$tracks, steps_6h)
 
-#hist(indiv_for_resampling$mean)
-
-#filter locations based on sampling rate critera. Remove additional problematic individuals  
-test <-  locs_nested %>%
-  filter(animal_id %in% indiv_for_resampling) %>% 
-  filter(!(animal_id %in% c("Cato", "Crash"))) %>% 
-  select(-c(data, sr)) 
+amt_steps <- amt_locs %>% 
+  select(animal_id:dispersal_status,
+         steps) %>% 
+  unnest(cols=c(steps))
 
 
-#resample tracks and generate steps
-test$steps <-  map(test$tracks, steps_6h)
+#### By Min: Retains 100 individuals for 6 hour sampling: confirms Tom's method #####
+# 
+# #filter sampling rate summary frame to get vector of individual names to resample
+# indiv_for_resampling_min <- sampling_rates %>% 
+#   mutate(min=round(min, digits = 0)) %>% 
+#   filter(min < 4) %>% 
+#   pull(animal_id)
+# 
+# #hist(indiv_for_resampling_min$min)
+# 
+# #filter locations based on sampling rate critera. Remove additional problematic individuals  
+# test_min <-  locs_nested %>%
+#   filter(animal_id %in% indiv_for_resampling_min) %>% 
+#   filter(!(animal_id %in% c("Butch", "Cato", "Crash", "OtookTom", "Promise"))) %>% 
+#   select(-c(data, sr)) 
+# 
+# 
+# #resample tracks and generate steps
+# test_min$steps <-  map(test_min$tracks, steps_6h)
+
+#### By Mean: Only retains 63 individuals ##
+# 
+# #filter sampling rate summary frame to get vector of individual names to resample
+# indiv_for_resampling <- sampling_rates %>% 
+#   mutate(mean=round(mean, digits = 0)) %>% 
+#   filter(mean %in% c(1, 2, 3, 6)) %>% 
+#   pull(animal_id)
+# 
+# #hist(indiv_for_resampling$mean)
+# 
+# #filter locations based on sampling rate critera. Remove additional problematic individuals  
+# test <-  locs_nested %>%
+#   filter(animal_id %in% indiv_for_resampling) %>% 
+#   filter(!(animal_id %in% c("Cato", "Crash"))) %>% 
+#   select(-c(data, sr)) 
+# 
+# 
+# #resample tracks and generate steps
+# test$steps <-  map(test$tracks, steps_6h)
 
 
 
-#### By Min: Retains 100 individuals ###
-
-#filter sampling rate summary frame to get vector of individual names to resample
-indiv_for_resampling_min <- sampling_rates %>% 
-  mutate(min=round(min, digits = 0)) %>% 
-  filter(min < 4) %>% 
-  pull(animal_id)
-
-#hist(indiv_for_resampling_min$min)
-
-#filter locations based on sampling rate critera. Remove additional problematic individuals  
-test_min <-  locs_nested %>%
-  filter(animal_id %in% indiv_for_resampling_min) %>% 
-  filter(!(animal_id %in% c("Butch", "Cato", "Crash", "OtookTom", "Promise"))) %>% 
-  select(-c(data, sr)) 
 
 
-#resample tracks and generate steps
-test_min$steps <-  map(test_min$tracks, steps_6h)
+
+
+
+
+################################ Covariates #################################
 
 
 
