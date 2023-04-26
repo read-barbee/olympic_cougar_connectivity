@@ -11,6 +11,16 @@ library(lubridate)
 library(amt)
 library(janitor)
 
+################################ User-Defined Parameters #################################
+
+project_crs <- "epsg:5070"
+
+resample_int_hours <- 6
+
+tolerance <- minutes(15)
+
+rand_steps <- 10
+
 
 ################################ Data Import #################################
 # Mountain lion location data (November 2022)
@@ -21,14 +31,6 @@ deployments <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_co
 
 # Dispersal inventory from Teams (3-13-2023)
 dispersals <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Dispersals_03-13-2023.csv")
-
-
-### Habitat covariate data
-
-elev <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/puma_elev_op.tif")
-
-ndvi <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/puma_ndvi_op.tif")
-
 
 
 ################################ Data Cleaning/Formatting #################################
@@ -205,9 +207,29 @@ amt_steps <- amt_locs %>%
 
 
 
-################################ Covariates #################################
 
 
+################################ Import Covariates #################################
+
+#all layers are in EPSG: 4326 with resolution (0.0002694946, 0.0002694946)
+elev <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_elev_op.tif")
+
+ndvi <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_ndvi_op.tif")
+
+dist_water <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_waterDist_op.tif")
+
+roads_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_roads_op.tif")
+
+forest <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_forest_op.tif")
+
+landuse_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_landuse_op.tif")
+
+rast_reproj <- function(raster){
+  project(x=raster, y=project_crs )
+}
+
+#very slow
+#map(list(elev, ndvi, dist_water, roads_hii, forest, landuse_hii), rast_reproj)
 
 
 #reproject habitat layers to NAD83 / Conus Albers: 5070
@@ -222,47 +244,5 @@ stack <- c(elev_reproj,
            ndvi_reproj)
 
 
-#function for resampling and fitting iSSFs for each individual: incomplete--not tested yet
-model_fun <- function(x){ 
-  x %>% 
-    track_resample(rate = hours(3),
-                   tolerance = minutes(10)) %>% 
-    filter_min_n_burst(min_n = 3) %>% 
-    steps_by_burst() %>% 
-    random_steps(n = 10)
-    
-}
-
-
-deployments2 <- deployments %>% 
-  clean_names() %>% 
-  filter(!duplicated(name)) %>% 
-  mutate(deployment_date = mdy(deployment_date),
-         end_date = mdy(end_date))
-
-
-
-
-
-
-#count dispersers
-dispersals %>% 
-  clean_names() %>% 
-  filter(!is.na(name)) %>% 
-  distinct(name) %>% 
-  count()
-
-dispersals %>% 
-  clean_names() %>% 
-  filter(!is.na(name)) %>% 
-  group_by(sex) %>% 
-  distinct(name) %>% 
-  count()
-
-#Resident Males: 53
-#Disperser Males: 22
-
-#Resident Females: 56
-#Disperser Females: 13
 
 
