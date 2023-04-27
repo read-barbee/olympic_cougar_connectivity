@@ -22,7 +22,38 @@ tolerance <- minutes(15)
 rand_steps <- 10
 
 
-################################ Data Import #################################
+################################ Import and Format Covariates #################################
+
+#all layers are in EPSG: 4326 with resolution (0.0002694946, 0.0002694946)
+elev <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_elev_op.tif")
+
+ndvi <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_ndvi_op.tif")
+
+dist_water <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_waterDist_op.tif")
+
+roads_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_roads_op.tif")
+
+forest <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_forest_op.tif")
+
+landuse_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_landuse_op.tif")
+
+rast_reproj <- function(raster){
+  new_rast <- project(x=raster, y=project_crs )
+  return(new_rast)
+}
+
+#reproject all rasters to Albers equal area ("epsg:5070") very slow
+rasts_reproj <- map(list(elev, ndvi, dist_water, roads_hii, forest, landuse_hii), rast_reproj)
+
+#make a raster stack
+cov_stack <- rast(rasts_reproj)
+
+
+
+
+
+
+################################ Import Location Data #################################
 # Mountain lion location data (November 2022)
 locs_raw <- read_csv("data/Location Data/Source Files/locations_master/all_locations_trimmed_2022-11-06.csv")
 
@@ -59,8 +90,10 @@ dem_cats <- first_deps %>%
          dispersal_status)
 
 
-#remove missing locations
+#remove missing locations and convert GMT timestamp to local time
 locs <- locs_raw %>% 
+  mutate(date_time_local = with_tz(date_time_gmt,"US/Pacific"), 
+         .after=date_time_gmt) %>% 
   filter(!is.na(latitude))
 
 #nest locations into list columns by animal_id
@@ -80,7 +113,7 @@ locs_nested <- locs_nested %>%
 #Create track for each animal
 
 multi_track <- function(d){
-  make_track(d, longitude, latitude, date_time_gmt, crs = 4326) %>% 
+  make_track(d, longitude, latitude, date_time_local, crs = 4326) %>% 
     transform_coords(crs_to = 5070)
 }
 
@@ -119,7 +152,7 @@ locs_nested_test$steps <- map(locs_nested$tracks, test_fun1)
 
 locs_nested_test %>% 
   filter(nrow(steps)==0) %>% 
-  select(steps) %>% View()
+  select(steps)
 
 indiv_to_remove <- locs_nested_test %>% 
   filter(nrow(steps)==0) %>% 
@@ -136,14 +169,16 @@ indiv_to_remove <- locs_nested_test %>%
 #6 hours retains the most individuals
 
 
-################################ Resample Tracks/Generate Steps #################################
+################################ Resample Tracks/Generate Steps/Extract covariate values #################################
 
 steps_6h <- function(x) {
   x %>% 
     amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
     amt::filter_min_n_burst() %>% #divide into bursts of min 3 pts
-    amt::steps_by_burst() %>% 
+    amt::steps_by_burst() %>%  #convert to steps
     amt::random_steps() %>% #generate 10 random steps per used step
+    amt::extract_covariates(cov_stack, where = "both") %>% #extract covariates at start and end
+    #amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
 }
 
@@ -159,89 +194,6 @@ amt_steps <- amt_locs %>%
   unnest(cols=c(steps))
 
 
-#### By Min: Retains 100 individuals for 6 hour sampling: confirms Tom's method #####
-# 
-# #filter sampling rate summary frame to get vector of individual names to resample
-# indiv_for_resampling_min <- sampling_rates %>% 
-#   mutate(min=round(min, digits = 0)) %>% 
-#   filter(min < 4) %>% 
-#   pull(animal_id)
-# 
-# #hist(indiv_for_resampling_min$min)
-# 
-# #filter locations based on sampling rate critera. Remove additional problematic individuals  
-# test_min <-  locs_nested %>%
-#   filter(animal_id %in% indiv_for_resampling_min) %>% 
-#   filter(!(animal_id %in% c("Butch", "Cato", "Crash", "OtookTom", "Promise"))) %>% 
-#   select(-c(data, sr)) 
-# 
-# 
-# #resample tracks and generate steps
-# test_min$steps <-  map(test_min$tracks, steps_6h)
-
-#### By Mean: Only retains 63 individuals ##
-# 
-# #filter sampling rate summary frame to get vector of individual names to resample
-# indiv_for_resampling <- sampling_rates %>% 
-#   mutate(mean=round(mean, digits = 0)) %>% 
-#   filter(mean %in% c(1, 2, 3, 6)) %>% 
-#   pull(animal_id)
-# 
-# #hist(indiv_for_resampling$mean)
-# 
-# #filter locations based on sampling rate critera. Remove additional problematic individuals  
-# test <-  locs_nested %>%
-#   filter(animal_id %in% indiv_for_resampling) %>% 
-#   filter(!(animal_id %in% c("Cato", "Crash"))) %>% 
-#   select(-c(data, sr)) 
-# 
-# 
-# #resample tracks and generate steps
-# test$steps <-  map(test$tracks, steps_6h)
-
-
-
-
-
-
-
-
-
-
-
-################################ Import Covariates #################################
-
-#all layers are in EPSG: 4326 with resolution (0.0002694946, 0.0002694946)
-elev <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_elev_op.tif")
-
-ndvi <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_ndvi_op.tif")
-
-dist_water <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_waterDist_op.tif")
-
-roads_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_roads_op.tif")
-
-forest <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_forest_op.tif")
-
-landuse_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_landuse_op.tif")
-
-rast_reproj <- function(raster){
-  project(x=raster, y=project_crs )
-}
-
-#very slow
-#map(list(elev, ndvi, dist_water, roads_hii, forest, landuse_hii), rast_reproj)
-
-
-#reproject habitat layers to NAD83 / Conus Albers: 5070
-
-elev_reproj <- project(x=elev,
-                       y= "epsg:5070")
-
-ndvi_reproj <- project(x=ndvi,
-                       y= "epsg:5070")
-
-stack <- c(elev_reproj,
-           ndvi_reproj)
 
 
 
