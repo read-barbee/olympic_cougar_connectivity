@@ -25,7 +25,7 @@ rand_steps <- 10
 ################################ Import and Format Covariates #################################
 
 #all layers are in EPSG: 4326 with resolution (0.0002694946, 0.0002694946)
-elev <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_elev_op.tif")
+elev <- terra::rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_elev_op.tif")
 
 ndvi <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_ndvi_op.tif")
 
@@ -37,6 +37,14 @@ forest <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_conn
 
 landuse_hii <- rast("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/homerange_habitat_layers_JR_9-14-22/assets/puma_hii_landuse_op.tif")
 
+#rename layers
+names(elev) <- "elev"
+names(ndvi) <- "ndvi"
+names(dist_water) <- "dist_water"
+names(roads_hii) <- "roads_hii"
+names(forest) <- "forest"
+names(landuse_hii) <- "landuse_hii"
+
 rast_reproj <- function(raster){
   new_rast <- project(x=raster, y=project_crs )
   return(new_rast)
@@ -47,9 +55,6 @@ rasts_reproj <- map(list(elev, ndvi, dist_water, roads_hii, forest, landuse_hii)
 
 #make a raster stack
 cov_stack <- rast(rasts_reproj)
-
-
-
 
 
 
@@ -133,8 +138,6 @@ sampling_rates <- locs_nested %>%
 
 summary(sampling_rates)
 
-#the largest minimum fix interval across all individuals is 4 hours
-
 
 ################################ Identify optimum resampling interval #################################
 
@@ -190,9 +193,39 @@ amt_locs$steps <- map(amt_locs$tracks, steps_6h)
 
 amt_steps <- amt_locs %>% 
   select(animal_id:dispersal_status,
-         steps) %>% 
-  unnest(cols=c(steps))
+         steps) 
 
+#%>% unnest(cols=c(steps)) %>% View()
+
+#scale covariates
+amt_steps_scaled <- amt_steps %>% 
+  unnest(cols=steps) %>% 
+  mutate(across(elev_start:landuse_hii_end, scale)) %>% 
+  mutate(across(elev_start:landuse_hii_end, as.numeric)) %>% 
+  na.omit() %>% 
+  nest(steps=c(-animal_id, -sex, -dispersal_status))
+  #nest_by(canimal_id, sex, dispersal_status)
+
+# amt_steps_scaled %>% unnest(cols=steps) %>% 
+# write_csv("6h_steps_scaled_cov_4-27-2023.csv")
+
+
+################################ Two Step clogit #################################
+
+###Step 1: fit iSSF to each individual ###
+#the piping workflow isn't working for some reason
+# indiv_issfs_global <- amt_steps %>% dplyr::mutate(fit = map(steps, ~ amt::fit_issf(., case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + landuse_hii_end +  strata(unique_step))))
+
+amt_steps_scaled$fit <-  map(amt_steps_scaled$steps, ~ amt::fit_issf(., case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + landuse_hii_end +  strata(unique_step), model = TRUE))
+
+
+#inspect fitted object
+amt_steps_scaled$fit
+
+#inspect model fit for first individual
+amt_steps_scaled$fit[[1]]$model
+
+# log_rss(amt_steps_scaled$fit[[1]], x1 = )
 
 
 
