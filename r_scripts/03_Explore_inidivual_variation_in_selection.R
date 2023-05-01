@@ -146,3 +146,57 @@ ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
   xlab("Elevation (SD)") +
   ylab("log-RSS vs Mean Elevation") +
   theme_bw()
+
+
+d2 <- steps_scaled_nested %>% dplyr::mutate(coef = list(map(fit, ~ broom::tidy(fit$model))))%>%
+  dplyr::select(animal_id, sex, dispersal_status, coef) %>% 
+  unnest(cols = coef) %>%
+  unnest(cols = coef) %>% 
+  mutate(animal_id = factor(animal_id)) %>% group_by(term) %>%
+  summarize(
+    mean = mean(estimate),
+    ymin = mean - 1.96 * sd(estimate),
+    ymax = mean + 1.96 * sd(estimate))
+
+d2$x <- 1:nrow(d2)
+d2
+
+#plot of relative selection strength by individual and sex
+p1 <- steps_scaled_nested %>% 
+  mutate(coef = list(map(fit, ~ broom::tidy(fit$model, conf.int = T)))) %>%
+  dplyr::select(animal_id, sex, dispersal_status, coef) %>% 
+  unnest(cols = coef) %>% 
+  unnest(cols = coef) %>% 
+  mutate(animal_id = factor(animal_id)) %>%
+  ggplot(., aes(x = term, y = estimate, group = animal_id, col = sex, pch = sex)) +
+  geom_rect(mapping = aes(xmin = x - .4, xmax = x + .4, ymin = ymin, ymax = ymax), data = d2, inherit.aes = FALSE,fill = "grey90") +
+  geom_segment(mapping = aes(x = x - .4, xend = x + .4,y = mean, yend = mean), data = d2, inherit.aes = FALSE, size = 1) +
+  geom_pointrange(aes(ymin = conf.low, ymax = conf.high), position = position_dodge(width = 0.7), size = 0.8) + 
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Covariate", y = "Relative selection Strength") + theme_light() +
+  scale_x_discrete(labels =d2$term) +
+  coord_cartesian(ylim=c(-2,2))
+
+
+plotly::ggplotly(p1)
+
+
+#plot of relative selection strength by dispersal status and sex
+p2 <- steps_scaled_nested %>% 
+  mutate(coef = list(map(fit, ~ broom::tidy(fit$model, conf.int = T)))) %>%
+  dplyr::select(animal_id, sex, dispersal_status, coef) %>% 
+  unnest(cols = coef) %>% 
+  unnest(cols = coef) %>% 
+  mutate(animal_id = factor(animal_id)) %>%
+  ggplot(., aes(x = term, y = estimate, group = animal_id, col = dispersal_status, pch = sex)) +
+  geom_rect(mapping = aes(xmin = x - .4, xmax = x + .4, ymin = ymin, ymax = ymax), data = d2, inherit.aes = FALSE,fill = "grey90") +
+  geom_segment(mapping = aes(x = x - .4, xend = x + .4,y = mean, yend = mean), data = d2, inherit.aes = FALSE, size = 1) +
+  geom_pointrange(aes(ymin = conf.low, ymax = conf.high), position = position_dodge(width = 0.7), size = 0.8) + 
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Covariate", y = "Relative selection Strength") + theme_light() +
+  scale_x_discrete(labels =d2$term) +
+  coord_cartesian(ylim=c(-2,2))
+
+
+plotly::ggplotly(p2)
+
