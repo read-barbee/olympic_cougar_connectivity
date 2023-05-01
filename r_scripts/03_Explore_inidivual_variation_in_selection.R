@@ -174,7 +174,7 @@ ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
 
 
 #function to calculate log_rss object for elevation for each individual. Working.
-l_rss <- function(dat, indiv, curr_param){
+#l_rss <- function(dat, indiv, curr_param){
   indiv_dat <- dat %>% 
     na.omit() %>% 
     filter(animal_id == indiv) %>% 
@@ -313,19 +313,19 @@ l_rss2 <- function(dat, indiv, curr_param){
     s1$elev_end <- seq(from = min(indiv_dat$elev_end, na.rm=T), to = max(indiv_dat$elev_end, na.rm=T), length.out = 200)
   }
   if (curr_param == "ndvi_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)
+    s1$ndvi_end <- seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)
   }
-  if (curr_param == "forrest_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$forrest_end, na.rm=T), to = max(indiv_dat$forrest_end, na.rm=T), length.out = 200)
+  if (curr_param == "forest_end"){
+    s1$forest_end <- seq(from = min(indiv_dat$forest_end, na.rm=T), to = max(indiv_dat$forest_end, na.rm=T), length.out = 200)
   }
   if (curr_param == "dist_water_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)
+    s1$dist_water_end <- seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)
   }
   if (curr_param == "roads_hii_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)
+    s1$roads_hii_end <- seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)
   }
   if (curr_param == "landuse_hii_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$landuse_hii_end, na.rm=T), to = max(indiv_dat$landuse_hii_end, na.rm=T), length.out = 200)
+    s1$landuse_hii_end <- seq(from = min(indiv_dat$landuse_hii_end, na.rm=T), to = max(indiv_dat$landuse_hii_end, na.rm=T), length.out = 200)
   }
   
   indiv_dat_nested <- dat %>% 
@@ -357,8 +357,7 @@ steps_scaled_nested$landuse_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, 
 
 
 
-#plot with 95% large-sample confidence intervals
-
+#Elevation Log-RSS plot all individuals
 steps_scaled_nested %>% 
   select(animal_id:dispersal_status, elev_rss) %>% 
   unnest(cols=c(elev_rss)) %>% 
@@ -372,8 +371,107 @@ steps_scaled_nested %>%
   ylab("log-RSS vs Mean Elevation") +
   theme_bw()
 
+#Roads Log-RSS plot all individuals
+steps_scaled_nested %>% 
+  select(animal_id:dispersal_status, roads_rss) %>% 
+  unnest(cols=c(roads_rss)) %>% 
+  ggplot(., aes(x = roads_hii_end_x1, y = log_rss)) +
+  #geom_ribbon(aes(ymin = lwr, ymax = upr), 
+  # linetype = "dashed", 
+  #color = "black", fill = "gray80", alpha = 0.5) +
+  geom_smooth(aes(pch=animal_id, color=sex),size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("NDVI(SD)") +
+  ylab("log-RSS vs Mean NDVI") +
+  theme_bw()
+
+#NDVI Log-RSS plot all individuals
+steps_scaled_nested %>% 
+  select(animal_id:dispersal_status, ndvi_rss) %>% 
+  unnest(cols=c(ndvi_rss)) %>% 
+  ggplot(., aes(x = ndvi_end_x1, y = log_rss)) +
+  #geom_ribbon(aes(ymin = lwr, ymax = upr), 
+  # linetype = "dashed", 
+  #color = "black", fill = "gray80", alpha = 0.5) +
+  geom_smooth(aes(pch=animal_id, color=sex),size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("NDVI(SD)") +
+  ylab("log-RSS vs Mean NDVI") +
+  theme_bw()
 
 
+
+
+
+
+
+###### Faceted plot not working. Need way to extract only the varying values from each log_rss object
+
+test <- steps_scaled_nested %>% 
+  select(-c(steps, fit)) %>% 
+  pivot_longer(elev_rss:landuse_rss, names_to= "cov", values_to = "rss_val") %>% 
+  filter(animal_id=="Al") %>% 
+  unnest(cols=c(rss_val))
+
+View(test$rss_val[[1]])
+
+test %>% 
+  mutate(cov_vals= case_when(
+    cov == "elev_rss" ~ elev_end_x1,
+    cov == "ndvi_rss" ~ ndvi_end_x1,
+    cov == "dist_water_rss" ~ dist_water_end_x1,
+    cov == "forest_rss" ~ forest_end_x1,
+    cov == "roads_rss" ~ roads_hii_end_x1,
+    cov == "landuse_rss" ~ landuse_hii_end_x1
+  )) %>%  View()
+
+
+
+steps_scaled_nested %>% 
+  select(-c(steps, fit)) %>% 
+  pivot_longer(elev_rss:landuse_rss, names_to= "cov", values_to = "rss_val") %>%
+  #unnest(cols=c(rss_val)) %>% 
+  ggplot(., aes(x = rss_val, y = log_rss)) +
+  geom_smooth(aes(pch=animal_id, color=sex),size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+ # xlab("Elevation (SD)") +
+ # ylab("log-RSS vs Mean Elevation") +
+  theme_bw() +
+  facet_wrap(~cov, scales = "free")
+
+
+# case_when(cov=="elev_rss" ~ elev_end_x1,
+#           cov=="ndvi_rss" ~ ndvi_end_x1,
+#           cov=="forest_rss" ~ forest_end_x1,
+#           cov=="dist_water_rss" ~ dist_water_end_x1,
+#           cov=="roads_rss" ~ roads_hii_end_x1,
+#           cov=="landuse_rss" ~ landuse_hii_end_x1)
+
+
+# mutate(rss_vec = case_when(
+#   cov == "elev_rss" ~ rss_val %>% pull(elev_end_x1),
+#   cov == "ndvi_rss" ~ rss_val %>% pull(ndvi_end_x1),
+#   cov == "dist_water_rss" ~ rss_val %>% pull(dist_water_end_x1),
+#   cov == "forest_rss" ~ rss_val %>% pull(forest_end_x1),
+#   cov == "roads_rss" ~ rss_val %>% pull(roads_hii_end_x1),
+#   cov == "landuse_rss" ~ rss_val %>% pull(landuse_hii_end_x1)
+# ))
+# 
+# 
+# 
+# unnest(cols=c(rss_val)) %>%
+#   pivot_longer(elev_end_x1:landuse_hii_end_x1, names_to="cov_names", values_to = "cov_vals") %>% 
+#   filter(
+#     case_when(
+#       cov == "elev_rss" & cov_names == "elev_end_x1" ~ TRUE,
+#       cov == "ndvi_rss" & cov_names == "ndvi_end_x1" ~ TRUE,
+#       cov == "dist_water_rss" & cov_names == "dist_water_end_x1" ~ TRUE,
+#       cov == "forest_rss" & cov_names == "forest_end_x1" ~ TRUE,
+#       cov == "roads_rss" & cov_names == "roads_hii_end_x1" ~ TRUE,
+#       cov == "landuse_rss" & cov_names == "landuse_hii_end_x1" ~ TRUE,
+#       .default = FALSE
+#     )
+#   )
 
 
 ################################ Individual Selection Plots #################################
@@ -429,6 +527,44 @@ p2 <- steps_scaled_nested %>%
 
 
 plotly::ggplotly(p2)
+
+
+
+
+
+
+
+
+
+# create a sample data frame
+df <- data.frame(
+  x = 1:10,
+  y = rnorm(10)
+)
+
+# filter rows based on multiple conditions using case_when()
+filtered_df <- df %>%
+  filter(
+    case_when(
+      x == 1 ~ TRUE,
+      x == 6 | x == 7 ~ TRUE,
+      x == 8 ~ FALSE,
+      x %in% 3:5 ~ FALSE
+    )
+  )
+
+# view the filtered data frame
+filtered_df
+
+
+
+
+
+
+
+
+
+
 
 
 
