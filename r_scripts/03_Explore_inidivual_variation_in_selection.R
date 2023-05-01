@@ -71,16 +71,14 @@ steps_scaled_nested$fit[[1]]$model
 
 ################################ Calculate log_RSS for one individual #################################
 
-# log_rss(amt_steps_scaled$fit[[1]], x1 = )
-
-
 al <- steps_raw %>% 
   na.omit() %>% 
   filter(animal_id =="Al")
 
-al2 <- steps_scaled %>% 
+al2 <- steps_scaled_nested %>% 
   na.omit() %>% 
-  filter(animal_id =="Al")
+  filter(animal_id =="Al") %>% 
+  unnest(cols=c(steps))
 
 #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
 s1 <- data.frame(
@@ -95,11 +93,13 @@ roads_hii_end <- mean(al2$roads_hii_end),
 forest_end <- mean(al2$forest_end),
 
 landuse_hii_end <- mean(al2$landuse_hii_end)
-
-#sl <- mean(al$sl_),
-  
-#log_sl <- log(sl)
-)
+) %>% 
+  rename(elev_end = elev_end....seq.from...min.al2.elev_end...to...max.al2.elev_end...,
+         ndvi_end = ndvi_end....mean.al2.ndvi_end.,
+         dist_water_end= dist_water_end....mean.al2.dist_water_end.,
+         roads_hii_end = roads_hii_end....mean.al2.roads_hii_end.,
+         forest_end = forest_end....mean.al2.forest_end.,
+         landuse_hii_end = landuse_hii_end....mean.al2.landuse_hii_end.)
 
 #data frame with means of all covariates encountered by Al
 s2 <- data.frame(
@@ -114,14 +114,35 @@ s2 <- data.frame(
   forest_end <- mean(al2$forest_end),
   
   landuse_hii_end <- mean(al2$landuse_hii_end)
-  
-  #sl <- mean(al$sl_),
-  
-  #log_sl <- log(sl)
-)
+) %>% 
+  rename(elev_end = elev_end....mean.al2.elev_end.,
+         ndvi_end = ndvi_end....mean.al2.ndvi_end.,
+         dist_water_end = dist_water_end....mean.al2.dist_water_end.,
+         roads_hii_end = roads_hii_end....mean.al2.roads_hii_end.,
+         forest_end = forest_end....mean.al2.forest_end.,
+         landuse_hii_end = landuse_hii_end....mean.al2.landuse_hii_end.
+         )
 
 
-### Not working. RESUME HERE
-l_rss_al <- amt::log_rss(steps_scaled_nested$fit[[1]], s1, s2)
+### Working. variable names have to be the same across all data frames and model
+l_rss_al <- amt::log_rss(steps_scaled_nested$fit[[1]], s1, s2, ci = "se", ci_level = 0.95)
+
+# Plot using ggplot2
+ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("Elevation (SD)") +
+  ylab("log-RSS vs Mean Elevation") +
+  theme_bw()
 
 
+#plot with 95% large-sample confidence intervals
+ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), 
+              linetype = "dashed", 
+              color = "black", fill = "gray80", alpha = 0.5) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("Elevation (SD)") +
+  ylab("log-RSS vs Mean Elevation") +
+  theme_bw()
