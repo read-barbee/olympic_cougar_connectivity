@@ -35,6 +35,25 @@ library(janitor)
 steps_raw <- read_csv("6h_steps_cov_4-28-2023.csv")
 
 
+################################ Check covariate distributions #################################
+#pivot hsi longer for graphing
+steps_long <- steps_raw %>% 
+  pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val")
+
+
+#boxplot of used values for all continuous variables faceted by sex and dispersal status
+steps_long %>% 
+  filter(case_==TRUE) %>% 
+  ggplot() +
+  geom_boxplot(aes(x=as.factor(dispersal_status), y=cov_val, fill=sex))+
+  facet_wrap(~cov, scales="free") 
+
+#histogram of used values for all continuous variables faceted by sex and dispersal status
+steps_long %>% 
+  filter(case_==TRUE) %>% 
+  ggplot() +
+  geom_histogram(aes(x=cov_val, fill=sex))+
+  facet_wrap(~cov, scales="free") 
 
 ################################ Prepare data to fit models #################################
 
