@@ -256,24 +256,121 @@ l_rss <- function(dat, indiv, curr_param){
   return(l_rss_indiv)
 }
 
+#this version only returns the df component of the log_rss object
+l_rss2 <- function(dat, indiv, curr_param){
+  indiv_dat <- dat %>% 
+    na.omit() %>% 
+    filter(animal_id == indiv) %>% 
+    unnest(cols=c(steps))
+  
+  #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
+  s1 <- data.frame(
+    elev_end <-seq(from = -2, to =2, length.out = 200),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = 1,
+           ndvi_end = 2,
+           dist_water_end = 3,
+           roads_hii_end = 4,
+           forest_end = 5,
+           landuse_hii_end = 6)
+  
+  s1$elev_end <- mean(indiv_dat$elev_end)
+  
+  
+  
+  #data frame with means of all covariates encountered by Al
+  s2 <- data.frame(
+    elev_end <-mean(indiv_dat$elev_end),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = 1,
+           ndvi_end = 2,
+           dist_water_end = 3,
+           roads_hii_end = 4,
+           forest_end = 5,
+           landuse_hii_end = 6)
+  
+  if (curr_param == "elev_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$elev_end, na.rm=T), to = max(indiv_dat$elev_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "ndvi_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "forrest_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$forrest_end, na.rm=T), to = max(indiv_dat$forrest_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "dist_water_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "roads_hii_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "landuse_hii_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$landuse_hii_end, na.rm=T), to = max(indiv_dat$landuse_hii_end, na.rm=T), length.out = 200)
+  }
+  
+  indiv_dat_nested <- dat %>% 
+    filter(animal_id == indiv)
+  
+  mod <- indiv_dat_nested$fit[[1]]
+  
+  ### Working. variable names have to be the same across all data frames and model
+  l_rss_indiv <- amt::log_rss(mod, s1, s2, ci = "se", ci_level = 0.95)
+  
+  return(l_rss_indiv$df)
+}
+
+
 
 indivs <- steps_scaled_nested %>% pull(animal_id)
 
 params <- c("elev_end", "ndvi_end", "forest_end", "dist_water_end", "roads_hii_end", "landuse_hii_end")
 
 
-#add rss tables to main data frame
-steps_scaled_nested$elev_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="elev_end")
-steps_scaled_nested$ndvi_rss <-map(indivs, l_rss, dat=steps_scaled_nested, curr_param="ndvi_end")
-steps_scaled_nested$forest_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="forest_end")
-steps_scaled_nested$dist_water_rss <-  map(indivs, l_rss, dat=steps_scaled_nested, curr_param="dist_water_end")
-steps_scaled_nested$roads_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="roads_hii_end")
-steps_scaled_nested$landuse_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="landuse_hii_end")
+# #add rss tables to main data frame
+steps_scaled_nested$elev_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="elev_end")
+steps_scaled_nested$ndvi_rss <-map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="ndvi_end")
+steps_scaled_nested$forest_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="forest_end")
+steps_scaled_nested$dist_water_rss <-  map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="dist_water_end")
+steps_scaled_nested$roads_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="roads_hii_end")
+steps_scaled_nested$landuse_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, curr_param="landuse_hii_end")
 
 
 
 
+#plot with 95% large-sample confidence intervals
 
+steps_scaled_nested %>% 
+  select(animal_id:dispersal_status, elev_rss) %>% 
+  unnest(cols=c(elev_rss)) %>% 
+  ggplot(., aes(x = elev_end_x1, y = log_rss)) +
+  #geom_ribbon(aes(ymin = lwr, ymax = upr), 
+             # linetype = "dashed", 
+              #color = "black", fill = "gray80", alpha = 0.5) +
+  geom_smooth(aes(pch=animal_id, color=sex),size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("Elevation (SD)") +
+  ylab("log-RSS vs Mean Elevation") +
+  theme_bw()
 
 
 
