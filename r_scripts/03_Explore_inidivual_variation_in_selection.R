@@ -88,63 +88,67 @@ steps_scaled_nested$fit[[1]]$model
 
 
 
-################################ Calculate log_RSS for one individual #################################
+################################ TEST: Calculate log_RSS for one covariate #################################
 
-al <- steps_raw %>% 
-  na.omit() %>% 
-  filter(animal_id =="Al")
-
-al2 <- steps_scaled_nested %>% 
-  na.omit() %>% 
-  filter(animal_id =="Al") %>% 
-  unnest(cols=c(steps))
-
-#data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
-s1 <- data.frame(
-elev_end <- seq(from = min(al2$elev_end), to = max(al2$elev_end), length.out = 200),
-
-ndvi_end <- mean(al2$ndvi_end),
-
-dist_water_end <- mean(al2$dist_water_end),
-
-roads_hii_end <- mean(al2$roads_hii_end),
-
-forest_end <- mean(al2$forest_end),
-
-landuse_hii_end <- mean(al2$landuse_hii_end)
-) %>% 
-  rename(elev_end = elev_end....seq.from...min.al2.elev_end...to...max.al2.elev_end...,
-         ndvi_end = ndvi_end....mean.al2.ndvi_end.,
-         dist_water_end= dist_water_end....mean.al2.dist_water_end.,
-         roads_hii_end = roads_hii_end....mean.al2.roads_hii_end.,
-         forest_end = forest_end....mean.al2.forest_end.,
-         landuse_hii_end = landuse_hii_end....mean.al2.landuse_hii_end.)
-
-#data frame with means of all covariates encountered by Al
-s2 <- data.frame(
-  elev_end <- mean(al2$elev_end),
+#function to calculate log_rss object for elevation for each individual. Working.
+elev_rss <- function(dat, indiv){
+  indiv_dat <- dat %>% 
+    na.omit() %>% 
+    filter(animal_id == indiv) %>% 
+    unnest(cols=c(steps))
   
-  ndvi_end <- mean(al2$ndvi_end),
+  #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
+  s1 <- data.frame(
+    elev_end <- seq(from = min(indiv_dat$elev_end), to = max(indiv_dat$elev_end), length.out = 200),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = elev_end....seq.from...min.indiv_dat.elev_end...to...max.indiv_dat.elev_end...,
+           ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
+           dist_water_end= dist_water_end....mean.indiv_dat.dist_water_end.,
+           roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
+           forest_end = forest_end....mean.indiv_dat.forest_end.,
+           landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.)
   
-  dist_water_end <- mean(al2$dist_water_end),
+  #data frame with means of all covariates encountered by Al
+  s2 <- data.frame(
+    elev_end <- mean(indiv_dat$elev_end),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = elev_end....mean.indiv_dat.elev_end.,
+           ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
+           dist_water_end = dist_water_end....mean.indiv_dat.dist_water_end.,
+           roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
+           forest_end = forest_end....mean.indiv_dat.forest_end.,
+           landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.
+    )
   
-  roads_hii_end <- mean(al2$roads_hii_end),
   
-  forest_end <- mean(al2$forest_end),
+  ### Working. variable names have to be the same across all data frames and model
+  l_rss_al <- amt::log_rss(dat$fit[[1]], s1, s2, ci = "se", ci_level = 0.95)
   
-  landuse_hii_end <- mean(al2$landuse_hii_end)
-) %>% 
-  rename(elev_end = elev_end....mean.al2.elev_end.,
-         ndvi_end = ndvi_end....mean.al2.ndvi_end.,
-         dist_water_end = dist_water_end....mean.al2.dist_water_end.,
-         roads_hii_end = roads_hii_end....mean.al2.roads_hii_end.,
-         forest_end = forest_end....mean.al2.forest_end.,
-         landuse_hii_end = landuse_hii_end....mean.al2.landuse_hii_end.
-         )
+  return(l_rss_al)
+}
 
+elev_rss(dat=steps_scaled_nested, indiv = "Zebra")
 
-### Working. variable names have to be the same across all data frames and model
-l_rss_al <- amt::log_rss(steps_scaled_nested$fit[[1]], s1, s2, ci = "se", ci_level = 0.95)
 
 # Plot using ggplot2
 ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
@@ -166,6 +170,116 @@ ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
   ylab("log-RSS vs Mean Elevation") +
   theme_bw()
 
+################################ Log RSS for all individuals and covariates #################################
+
+
+#function to calculate log_rss object for elevation for each individual. Working.
+l_rss <- function(dat, indiv, curr_param){
+  indiv_dat <- dat %>% 
+    na.omit() %>% 
+    filter(animal_id == indiv) %>% 
+    unnest(cols=c(steps))
+  
+  #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
+  s1 <- data.frame(
+    elev_end <-seq(from = -2, to =2, length.out = 200),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = 1,
+           ndvi_end = 2,
+           dist_water_end = 3,
+           roads_hii_end = 4,
+           forest_end = 5,
+           landuse_hii_end = 6)
+  
+  s1$elev_end <- mean(indiv_dat$elev_end)
+  
+  
+  
+  #data frame with means of all covariates encountered by Al
+  s2 <- data.frame(
+    elev_end <-mean(indiv_dat$elev_end),
+    
+    ndvi_end <- mean(indiv_dat$ndvi_end),
+    
+    dist_water_end <- mean(indiv_dat$dist_water_end),
+    
+    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    
+    forest_end <- mean(indiv_dat$forest_end),
+    
+    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+  ) %>% 
+    rename(elev_end = 1,
+           ndvi_end = 2,
+           dist_water_end = 3,
+           roads_hii_end = 4,
+           forest_end = 5,
+           landuse_hii_end = 6)
+  
+  if (curr_param == "elev_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$elev_end, na.rm=T), to = max(indiv_dat$elev_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "ndvi_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "forrest_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$forrest_end, na.rm=T), to = max(indiv_dat$forrest_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "dist_water_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "roads_hii_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "landuse_hii_end"){
+    s1$elev_end <- seq(from = min(indiv_dat$landuse_hii_end, na.rm=T), to = max(indiv_dat$landuse_hii_end, na.rm=T), length.out = 200)
+  }
+  
+  indiv_dat_nested <- dat %>% 
+    filter(animal_id == indiv)
+  
+  mod <- indiv_dat_nested$fit[[1]]
+  
+  ### Working. variable names have to be the same across all data frames and model
+  l_rss_indiv <- amt::log_rss(mod, s1, s2, ci = "se", ci_level = 0.95)
+  
+  return(l_rss_indiv)
+}
+
+
+indivs <- steps_scaled_nested %>% pull(animal_id)
+
+params <- c("elev_end", "ndvi_end", "forest_end", "dist_water_end", "roads_hii_end", "landuse_hii_end")
+
+
+#add rss tables to main data frame
+steps_scaled_nested$elev_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="elev_end")
+steps_scaled_nested$ndvi_rss <-map(indivs, l_rss, dat=steps_scaled_nested, curr_param="ndvi_end")
+steps_scaled_nested$forest_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="forest_end")
+steps_scaled_nested$dist_water_rss <-  map(indivs, l_rss, dat=steps_scaled_nested, curr_param="dist_water_end")
+steps_scaled_nested$roads_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="roads_hii_end")
+steps_scaled_nested$landuse_rss <- map(indivs, l_rss, dat=steps_scaled_nested, curr_param="landuse_hii_end")
+
+
+
+
+
+
+
+
+
+
+################################ Individual Selection Plots #################################
 
 d2 <- steps_scaled_nested %>% dplyr::mutate(coef = list(map(fit, ~ broom::tidy(fit$model))))%>%
   dplyr::select(animal_id, sex, dispersal_status, coef) %>% 
@@ -218,4 +332,9 @@ p2 <- steps_scaled_nested %>%
 
 
 plotly::ggplotly(p2)
+
+
+
+
+
 
