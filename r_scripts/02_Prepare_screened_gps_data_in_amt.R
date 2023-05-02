@@ -61,7 +61,8 @@ dem_cats <- first_deps %>%
                                       name %in% disperser_names == FALSE ~ "resident")) %>% 
   select(name,
          sex,
-         dispersal_status)
+         dispersal_status) %>% 
+  rename(animal_id=name)
 
 
 #remove missing locations and convert GMT timestamp to local time
@@ -73,9 +74,11 @@ locs <- locs_raw %>%
 #nest locations into list columns by animal_id
 locs_nested <- locs %>% nest_by(animal_id)
 
+
+
 #add columns for sex and dispersal status to nested locations 
-locs_nested$sex <-  dem_cats$sex
-locs_nested$dispersal_status <-  dem_cats$dispersal_status
+locs_nested <- locs_nested %>% 
+  left_join(dem_cats, by = join_by(animal_id))
 
 #reorder columns
 locs_nested <- locs_nested %>% 
@@ -143,6 +146,7 @@ indiv_to_remove <- locs_nested_test %>%
 
 ################################ Resample Tracks/Generate Steps/Extract covariate values #################################
 
+#function to convert locatons to 6hr steps and extract covariate values
 steps_6h <- function(x) {
   x %>% 
     amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
@@ -154,28 +158,29 @@ steps_6h <- function(x) {
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
 }
 
+#remove cato and the other individuals not compatible with the 6 hour sampling interval
 amt_locs <- locs_nested %>% 
   filter(!(animal_id %in% indiv_to_remove)) %>% 
   filter(animal_id != "Cato")
 
+#map the step function over each individual and append as a nested dataframe
 amt_locs$steps <- map(amt_locs$tracks, steps_6h)
 
+#select the relevant columns and unnest the steps column
 amt_steps <- amt_locs %>% 
   select(animal_id:dispersal_status,
          steps) %>% 
   unnest(cols=c(steps))
 
-#scale covariates
-amt_steps_scaled <- amt_steps %>% 
-  #unnest(cols=steps) %>% 
-  mutate(across(elev_start:landuse_hii_end, scale)) %>% 
+#scale covariates (optional)
+amt_steps_scaled <- amt_steps %>%
+  mutate(across(elev_start:landuse_hii_end, scale)) %>%
   mutate(across(elev_start:landuse_hii_end, as.numeric))
-  # %>% na.omit() 
-#%>%  nest(steps=c(-animal_id, -sex, -dispersal_status))
+
 
 
 # amt_steps_scaled %>% unnest(cols=steps) %>% 
-#write_csv(amt_steps, "6h_steps_cov_4-28-2023.csv")
+#write_csv(amt_steps_scaled, "6h_steps_scaled_cov_4-28-2023.csv")
 
 
 
