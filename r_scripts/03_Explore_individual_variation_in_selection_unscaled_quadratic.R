@@ -367,8 +367,8 @@ rss_plot_sex <- plot_dat %>%
   ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=sex),linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  # xlab("Elevation (SD)") +
-  # ylab("log-RSS vs Mean Elevation") +
+  xlab("Covariate Values") +
+  ylab("log-RSS vs Mean Covariate Value") +
   theme_bw() +
   facet_wrap(~cov, scales = "free")
 
@@ -387,8 +387,8 @@ rss_plot_sex_facet <- plot_dat %>%
   ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=sex),linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  # xlab("Elevation (SD)") +
-  # ylab("log-RSS vs Mean Elevation") +
+  xlab("Covariate Values") +
+  ylab("log-RSS vs Mean Covariate Value") +
   theme_bw() +
   facet_wrap(vars(cov, sex), scales = "free")
 
@@ -406,8 +406,8 @@ rss_plot_disp <- plot_dat %>%
   ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=dispersal_status),linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  # xlab("Elevation (SD)") +
-  # ylab("log-RSS vs Mean Elevation") +
+  xlab("Covariate Values") +
+  ylab("log-RSS vs Mean Covariate Value") +
   theme_bw() +
   facet_wrap(~cov, scales = "free")
 
@@ -427,13 +427,17 @@ rss_plot_disp_facet <- plot_dat %>%
   ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=dispersal_status),linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  # xlab("Elevation (SD)") +
-  # ylab("log-RSS vs Mean Elevation") +
+  xlab("Covariate Values") +
+  ylab("log-RSS vs Mean Covariate Value") +
   theme_bw() +
   facet_wrap(vars(cov, dispersal_status), scales = "free")
 
 plotly::ggplotly(rss_plot_disp_facet)
 
+# ggsave(filename= "male_female_rss_5-02-2023.png", plot= rss_plot_sex_facet)
+# ggsave(filename= "res_disp_rss_5-02-2023.png", plot= rss_plot_disp_facet)
+# ggsave(filename= "disp_rss_5-02-2023.png", plot= rss_plot_disp)
+# ggsave(filename= "mf_rss_5-02-2023.png", plot= rss_plot_sex)
 
 
 
