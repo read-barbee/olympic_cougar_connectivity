@@ -90,85 +90,85 @@ steps_scaled_nested$fit[[1]]$model
 
 ################################ TEST: Calculate log_RSS for one covariate #################################
 
-#function to calculate log_rss object for elevation for each individual. Working.
-elev_rss <- function(dat, indiv){
-  indiv_dat <- dat %>% 
-    na.omit() %>% 
-    filter(animal_id == indiv) %>% 
-    unnest(cols=c(steps))
-  
-  #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
-  s1 <- data.frame(
-    elev_end <- seq(from = min(indiv_dat$elev_end), to = max(indiv_dat$elev_end), length.out = 200),
-    
-    ndvi_end <- mean(indiv_dat$ndvi_end),
-    
-    dist_water_end <- mean(indiv_dat$dist_water_end),
-    
-    roads_hii_end <- mean(indiv_dat$roads_hii_end),
-    
-    forest_end <- mean(indiv_dat$forest_end),
-    
-    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
-  ) %>% 
-    rename(elev_end = elev_end....seq.from...min.indiv_dat.elev_end...to...max.indiv_dat.elev_end...,
-           ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
-           dist_water_end= dist_water_end....mean.indiv_dat.dist_water_end.,
-           roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
-           forest_end = forest_end....mean.indiv_dat.forest_end.,
-           landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.)
-  
-  #data frame with means of all covariates encountered by Al
-  s2 <- data.frame(
-    elev_end <- mean(indiv_dat$elev_end),
-    
-    ndvi_end <- mean(indiv_dat$ndvi_end),
-    
-    dist_water_end <- mean(indiv_dat$dist_water_end),
-    
-    roads_hii_end <- mean(indiv_dat$roads_hii_end),
-    
-    forest_end <- mean(indiv_dat$forest_end),
-    
-    landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
-  ) %>% 
-    rename(elev_end = elev_end....mean.indiv_dat.elev_end.,
-           ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
-           dist_water_end = dist_water_end....mean.indiv_dat.dist_water_end.,
-           roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
-           forest_end = forest_end....mean.indiv_dat.forest_end.,
-           landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.
-    )
-  
-  
-  ### Working. variable names have to be the same across all data frames and model
-  l_rss_al <- amt::log_rss(dat$fit[[1]], s1, s2, ci = "se", ci_level = 0.95)
-  
-  return(l_rss_al)
-}
-
-elev_rss(dat=steps_scaled_nested, indiv = "Zebra")
-
-
-# Plot using ggplot2
-ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
-  geom_line(size = 1) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  xlab("Elevation (SD)") +
-  ylab("log-RSS vs Mean Elevation") +
-  theme_bw()
-
-
-#plot with 95% large-sample confidence intervals
-ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr), 
-              linetype = "dashed", 
-              color = "black", fill = "gray80", alpha = 0.5) +
-  geom_line(size = 1) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-  xlab("Elevation (SD)") +
-  ylab("log-RSS vs Mean Elevation") +
-  theme_bw()
+# #function to calculate log_rss object for elevation for each individual. Working.
+# elev_rss <- function(dat, indiv){
+#   indiv_dat <- dat %>% 
+#     na.omit() %>% 
+#     filter(animal_id == indiv) %>% 
+#     unnest(cols=c(steps))
+#   
+#   #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
+#   s1 <- data.frame(
+#     elev_end <- seq(from = min(indiv_dat$elev_end), to = max(indiv_dat$elev_end), length.out = 200),
+#     
+#     ndvi_end <- mean(indiv_dat$ndvi_end),
+#     
+#     dist_water_end <- mean(indiv_dat$dist_water_end),
+#     
+#     roads_hii_end <- mean(indiv_dat$roads_hii_end),
+#     
+#     forest_end <- mean(indiv_dat$forest_end),
+#     
+#     landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+#   ) %>% 
+#     rename(elev_end = elev_end....seq.from...min.indiv_dat.elev_end...to...max.indiv_dat.elev_end...,
+#            ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
+#            dist_water_end= dist_water_end....mean.indiv_dat.dist_water_end.,
+#            roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
+#            forest_end = forest_end....mean.indiv_dat.forest_end.,
+#            landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.)
+#   
+#   #data frame with means of all covariates encountered by Al
+#   s2 <- data.frame(
+#     elev_end <- mean(indiv_dat$elev_end),
+#     
+#     ndvi_end <- mean(indiv_dat$ndvi_end),
+#     
+#     dist_water_end <- mean(indiv_dat$dist_water_end),
+#     
+#     roads_hii_end <- mean(indiv_dat$roads_hii_end),
+#     
+#     forest_end <- mean(indiv_dat$forest_end),
+#     
+#     landuse_hii_end <- mean(indiv_dat$landuse_hii_end)
+#   ) %>% 
+#     rename(elev_end = elev_end....mean.indiv_dat.elev_end.,
+#            ndvi_end = ndvi_end....mean.indiv_dat.ndvi_end.,
+#            dist_water_end = dist_water_end....mean.indiv_dat.dist_water_end.,
+#            roads_hii_end = roads_hii_end....mean.indiv_dat.roads_hii_end.,
+#            forest_end = forest_end....mean.indiv_dat.forest_end.,
+#            landuse_hii_end = landuse_hii_end....mean.indiv_dat.landuse_hii_end.
+#     )
+#   
+#   
+#   ### Working. variable names have to be the same across all data frames and model
+#   l_rss_al <- amt::log_rss(dat$fit[[1]], s1, s2, ci = "se", ci_level = 0.95)
+#   
+#   return(l_rss_al)
+# }
+# 
+# elev_rss(dat=steps_scaled_nested, indiv = "Zebra")
+# 
+# 
+# # Plot using ggplot2
+# ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
+#   geom_line(size = 1) +
+#   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+#   xlab("Elevation (SD)") +
+#   ylab("log-RSS vs Mean Elevation") +
+#   theme_bw()
+# 
+# 
+# #plot with 95% large-sample confidence intervals
+# ggplot(l_rss_al$df, aes(x = elev_end_x1, y = log_rss)) +
+#   geom_ribbon(aes(ymin = lwr, ymax = upr), 
+#               linetype = "dashed", 
+#               color = "black", fill = "gray80", alpha = 0.5) +
+#   geom_line(size = 1) +
+#   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+#   xlab("Elevation (SD)") +
+#   ylab("log-RSS vs Mean Elevation") +
+#   theme_bw()
 
 ################################ Log RSS for all individuals and covariates #################################
 
@@ -356,7 +356,7 @@ steps_scaled_nested$landuse_rss <- map(indivs, l_rss2, dat=steps_scaled_nested, 
 
 
 
-
+################################ Univarite RSS plots #################################
 #Elevation Log-RSS plot all individuals
 steps_scaled_nested %>% 
   select(animal_id:dispersal_status, elev_rss) %>% 
@@ -401,77 +401,48 @@ steps_scaled_nested %>%
 
 
 
+################################ RSS Plot all indiv all covariates #################################
 
-
-
-
-###### Faceted plot not working. Need way to extract only the varying values from each log_rss object
-
-test <- steps_scaled_nested %>% 
+#pivot data frame to get a row for every individual and every covariate
+plot_dat <- steps_scaled_nested %>% 
   select(-c(steps, fit)) %>% 
-  pivot_longer(elev_rss:landuse_rss, names_to= "cov", values_to = "rss_val") %>% 
-  filter(animal_id=="Al") %>% 
-  unnest(cols=c(rss_val))
-
-View(test$rss_val[[1]])
-
-test %>% 
-  mutate(cov_vals= case_when(
-    cov == "elev_rss" ~ elev_end_x1,
-    cov == "ndvi_rss" ~ ndvi_end_x1,
-    cov == "dist_water_rss" ~ dist_water_end_x1,
-    cov == "forest_rss" ~ forest_end_x1,
-    cov == "roads_rss" ~ roads_hii_end_x1,
-    cov == "landuse_rss" ~ landuse_hii_end_x1
-  )) %>%  View()
+  pivot_longer(elev_rss:landuse_rss, names_to= "cov", values_to = "rss_val")
 
 
+#initialize blank lists for for loop
+ls = list()
+ls2=list()
 
-steps_scaled_nested %>% 
-  select(-c(steps, fit)) %>% 
-  pivot_longer(elev_rss:landuse_rss, names_to= "cov", values_to = "rss_val") %>%
-  #unnest(cols=c(rss_val)) %>% 
-  ggplot(., aes(x = rss_val, y = log_rss)) +
+#for loop to extract just covariate and log rss-values for each covariate and indiviaual
+for(i in 1:nrow(plot_dat)){
+  ls[[i]] = case_when(
+    plot_dat$cov[i] == "elev_rss" ~ plot_dat$rss_val[[i]]$elev_end_x1,
+    plot_dat$cov[i] == "ndvi_rss" ~ plot_dat$rss_val[[i]]$ndvi_end_x1,
+    plot_dat$cov[i] == "dist_water_rss" ~ plot_dat$rss_val[[i]]$dist_water_end_x1,
+    plot_dat$cov[i] == "forest_rss" ~ plot_dat$rss_val[[i]]$forest_end_x1,
+    plot_dat$cov[i] == "roads_rss" ~ plot_dat$rss_val[[i]]$roads_hii_end_x1,
+    plot_dat$cov[i] == "landuse_rss" ~ plot_dat$rss_val[[i]]$landuse_hii_end_x1)
+  
+  ls2[[i]] = plot_dat$rss_val[[i]]$log_rss
+}
+
+#add lists from for loop to data frame and facet plot
+rss_plot <- plot_dat %>% 
+  mutate(cov_vals = ls,
+         rss_vals = ls2) %>% 
+  select(-rss_val) %>% 
+  unnest(cols=c(cov_vals, rss_vals)) %>% 
+  ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=sex),size = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
- # xlab("Elevation (SD)") +
- # ylab("log-RSS vs Mean Elevation") +
+  # xlab("Elevation (SD)") +
+  # ylab("log-RSS vs Mean Elevation") +
   theme_bw() +
   facet_wrap(~cov, scales = "free")
 
-
-# case_when(cov=="elev_rss" ~ elev_end_x1,
-#           cov=="ndvi_rss" ~ ndvi_end_x1,
-#           cov=="forest_rss" ~ forest_end_x1,
-#           cov=="dist_water_rss" ~ dist_water_end_x1,
-#           cov=="roads_rss" ~ roads_hii_end_x1,
-#           cov=="landuse_rss" ~ landuse_hii_end_x1)
+plotly::ggplotly(rss_plot)
 
 
-# mutate(rss_vec = case_when(
-#   cov == "elev_rss" ~ rss_val %>% pull(elev_end_x1),
-#   cov == "ndvi_rss" ~ rss_val %>% pull(ndvi_end_x1),
-#   cov == "dist_water_rss" ~ rss_val %>% pull(dist_water_end_x1),
-#   cov == "forest_rss" ~ rss_val %>% pull(forest_end_x1),
-#   cov == "roads_rss" ~ rss_val %>% pull(roads_hii_end_x1),
-#   cov == "landuse_rss" ~ rss_val %>% pull(landuse_hii_end_x1)
-# ))
-# 
-# 
-# 
-# unnest(cols=c(rss_val)) %>%
-#   pivot_longer(elev_end_x1:landuse_hii_end_x1, names_to="cov_names", values_to = "cov_vals") %>% 
-#   filter(
-#     case_when(
-#       cov == "elev_rss" & cov_names == "elev_end_x1" ~ TRUE,
-#       cov == "ndvi_rss" & cov_names == "ndvi_end_x1" ~ TRUE,
-#       cov == "dist_water_rss" & cov_names == "dist_water_end_x1" ~ TRUE,
-#       cov == "forest_rss" & cov_names == "forest_end_x1" ~ TRUE,
-#       cov == "roads_rss" & cov_names == "roads_hii_end_x1" ~ TRUE,
-#       cov == "landuse_rss" & cov_names == "landuse_hii_end_x1" ~ TRUE,
-#       .default = FALSE
-#     )
-#   )
 
 
 ################################ Individual Selection Plots #################################
@@ -527,41 +498,6 @@ p2 <- steps_scaled_nested %>%
 
 
 plotly::ggplotly(p2)
-
-
-
-
-
-
-
-
-
-# create a sample data frame
-df <- data.frame(
-  x = 1:10,
-  y = rnorm(10)
-)
-
-# filter rows based on multiple conditions using case_when()
-filtered_df <- df %>%
-  filter(
-    case_when(
-      x == 1 ~ TRUE,
-      x == 6 | x == 7 ~ TRUE,
-      x == 8 ~ FALSE,
-      x %in% 3:5 ~ FALSE
-    )
-  )
-
-# view the filtered data frame
-filtered_df
-
-
-
-
-
-
-
 
 
 
