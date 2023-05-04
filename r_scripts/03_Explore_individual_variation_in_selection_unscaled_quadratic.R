@@ -18,6 +18,7 @@
 # •	Calculate log-RSS and CI for range of each covariate for each individual
 # •	Compare proportions of individuals overall and in each demographic category with positive, negative or neutral response to each covariate
 
+#note: removing landuse from the global model didn't change the estimates
 
 
 ################################ Libraries #################################
@@ -40,6 +41,12 @@ steps_raw <- read_csv("6h_steps_cov_4-28-2023.csv")
 steps_long <- steps_raw %>% 
   pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val")
 
+#examine distributions of covariate values for steps-- landuse looks real bad
+steps_raw %>% 
+  pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val") %>% 
+  ggplot() +
+  geom_histogram(aes(x=cov_val))+
+  facet_wrap(~cov, scales="free") 
 
 #boxplot of used values for all continuous variables faceted by sex and dispersal status
 steps_long %>% 
@@ -48,6 +55,28 @@ steps_long %>%
   geom_boxplot(aes(x=as.factor(dispersal_status), y=cov_val, fill=sex))+
   facet_wrap(~cov, scales="free") 
 
+#boxplot of used and available values for all continuous variables faceted by sex and dispersal status**
+used_unused_dem_cats <- steps_long %>%
+  filter(cov!="landuse_hii_end") %>% 
+  ggplot() +
+  geom_boxplot(aes(x=as.factor(dispersal_status), y=cov_val, fill=sex, alpha=case_), notch = T)+
+  facet_wrap(~cov, scales="free")  + scale_alpha_manual(values =c(0.5, 1)) +
+  ylab("Covariate Values") +
+  xlab("Demographic Category")
+
+#ggsave(filename= "used_unused_dem_cats_5-03-2023.png", plot= used_unused_dem_cats)
+
+used_unused_dem_cats_violin <- steps_long %>%
+  filter(cov!="landuse_hii_end") %>% 
+  ggplot() +
+  geom_violin(aes(x=as.factor(dispersal_status), y=cov_val, fill=sex, alpha=case_))+
+  facet_wrap(~cov, scales="free")  + scale_alpha_manual(values =c(0.5, 1)) +
+  ylab("Covariate Values") +
+  xlab("Demographic Category")
+
+#ggsave(filename= "used_unused_dem_cats_violin_5-03-2023.png", plot= used_unused_dem_cats_violin)
+
+
 #histogram of used values for all continuous variables faceted by sex and dispersal status
 steps_long %>% 
   filter(case_==TRUE) %>% 
@@ -55,13 +84,37 @@ steps_long %>%
   geom_histogram(aes(x=cov_val, fill=sex))+
   facet_wrap(~cov, scales="free") 
 
+#histogram of used and available values for all continuous variables faceted by sex and dispersal status
+steps_long %>% 
+  filter(cov!="landuse_hii_end") %>% 
+  ggplot() +
+  geom_histogram(aes(x=cov_val, fill=sex, alpha=case_))+
+  facet_wrap(~cov, scales="free")  + scale_alpha_manual(values =c(0.5, 1))
+
+
+
+
+######Log transforming landuse, elevation, dist water and ndvi doesn't seem to help much...###
+# steps_log_cov <- steps_raw %>%
+#   mutate(across(c(dist_water_end, elev_end, landuse_hii_end, ndvi_end), log)) %>%
+#   na.omit() %>%
+#   pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val")
+# 
+# 
+# #used and available locations
+# steps_log_cov %>% 
+#   ggplot() +
+#   geom_boxplot(aes(x=as.factor(dispersal_status), y=cov_val, fill=sex))+
+#   facet_wrap(vars(cov, case_), scales="free") 
+
+
 ################################ Prepare data to fit models #################################
 
 #unscaled step data
-steps_unscaled_nested <- steps_raw %>% 
+steps_unscaled_nested <- steps_raw %>%
   na.omit() %>% 
   nest_by(animal_id, sex, dispersal_status) %>% 
-  rename(steps=data)
+  rename(steps=data) %>%  group_by(sex, dispersal_status) %>% count()
 
 ################################ Fit iSSF to each individual #################################
 
@@ -469,9 +522,38 @@ steps_scaled_nested %>% dplyr::mutate(coef = list(map(fit, ~ broom::tidy(fit$mod
   filter(case_when(!str_detect(term, "\\(") ~ TRUE )) %>% 
   filter(!(term %in% c("sl_", "landuse_hii_end"))) %>% 
   mutate(animal_id = factor(animal_id)) %>%
-  group_by(term, sex) %>% 
+  group_by(term,sex) %>% 
   summarize(mean=mean(estimate), 
             sd= sd(estimate))
+
+#plot of mean coefficient estimates by sex and dispersal status
+ds1 <- steps_scaled_nested %>% dplyr::mutate(coef = list(map(fit, ~ broom::tidy(fit$model))))%>%
+  dplyr::select(animal_id, sex, dispersal_status, coef) %>% 
+  unnest(cols = coef) %>%
+  unnest(cols = coef) %>% 
+  filter(case_when(!str_detect(term, "\\(") ~ TRUE )) %>% 
+  filter(!(term %in% c("sl_", "landuse_hii_end"))) %>% 
+  mutate(animal_id = factor(animal_id),
+         term=as.factor(term),
+         sex=as.factor(sex),
+         dispersal_status=as.factor(dispersal_status)) %>%
+  group_by(term, dispersal_status, sex) %>% 
+  summarize(mean=mean(estimate), 
+            sd= sd(estimate),
+            ymin = mean - 1.96* sd,
+            ymax = mean + 1.96* sd) %>% 
+  ggplot(., aes(x = term, y = mean, col = dispersal_status, pch = sex)) +
+  geom_pointrange(aes(ymin = ymin, ymax = ymax), position = position_dodge(width = 0.7), size = 0.8) +
+  labs(x = "Covariate", y = "Mean Coefficient Estimate") + 
+  theme_light() +
+  coord_cartesian(ylim=c(-0.7, 0.7))
+
+plotly::ggplotly(ds1)
+
+#ggsave(filename= "mean_coeffs_sex_disp_5-03-2023.png", plot= ds1)
+
+
+  
 
 #data for plotting
 d2 <- steps_scaled_nested %>% dplyr::mutate(coef = list(map(fit, ~ broom::tidy(fit$model))))%>%
@@ -533,8 +615,6 @@ p2 <- steps_scaled_nested %>%
 
 
 plotly::ggplotly(p2)
-
-
 
 
 
