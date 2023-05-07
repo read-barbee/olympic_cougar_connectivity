@@ -13,6 +13,8 @@ library(terra)
 library(lubridate)
 library(amt)
 library(janitor)
+# library(sf)
+# library(mapview)
 
 ################################ User-Defined Parameters #################################
 
@@ -74,11 +76,15 @@ locs <- locs_raw %>%
 #nest locations into list columns by animal_id
 locs_nested <- locs %>% nest_by(animal_id)
 
-
+# test <- locs %>% 
+#   filter(animal_id=="Al") %>% 
+#   st_as_sf(coords=c("longitude", "latitude"), crs =4326)
+# 
+# mapview(test$geometry)
 
 #add columns for sex and dispersal status to nested locations 
 locs_nested <- locs_nested %>% 
-  left_join(dem_cats, by = join_by(animal_id))
+  left_join(dem_cats, by = join_by(animal_id)) 
 
 #reorder columns
 locs_nested <- locs_nested %>% 
@@ -95,6 +101,12 @@ multi_track <- function(d){
 }
 
 locs_nested$tracks <- map(locs_nested$data, multi_track)
+
+dispersers <- locs_nested %>% 
+  filter(dispersal_status=="disperser")
+
+
+
 
 
 ################################ Examine Sampling Rates #################################
