@@ -255,7 +255,20 @@ plot_models(residents_fit, dispersers_fit,
 
 
 
+#try out model table
 
+tab_model(males_fit, females_fit, residents_fit, dispersers_fit,
+          transform=NULL,
+          dv.labels = c("Males", "Females", "Residents", "Dispersers"),
+          string.est = "Estimate (95% CI)",
+          collapse.ci=TRUE,
+          show.ngroups = TRUE,
+          pred.labels = c("elev_end" = "Elevation (m)", 
+                          "ndvi_end" ="NDVI", 
+                          "dist_water_end" = "Distance to Water (m)", 
+                          "roads_hii_end"= "Road Impact", 
+                          "forest_end"= "Forest Cover"),
+          file="muff_demographic_table1_full_screening_5-9-2023.png")
 
 
 

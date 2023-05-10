@@ -34,17 +34,32 @@ library(GGally)
 
 ############################### Import amt-formatted Data #################################
 # Import SSF data for 100 individual mountain lions (November 2022)
-steps_raw <- read_csv("6h_steps_cov_4-28-2023.csv")
+steps_raw <- read_csv("6h_steps_unscaled_cov_5-09-2023.csv")
 
+#make list of individuals with < 100 steps and <100 days of steps
+removal_list <- steps_raw %>%
+  group_by(animal_id) %>%
+  mutate(date_range=interval(start=min(t1_), end=max(t2_)),
+         step_days = as.duration(date_range)/ddays(1)) %>% 
+  distinct(step_id_, .keep_all = TRUE) %>% 
+  summarize(n=n(), step_days = round(first(step_days), 0)) %>%
+  filter(n<100 & step_days <= 100) %>%
+  pull(animal_id)
+
+
+#unscaled step data
+steps_unscaled <- steps_raw %>%
+  na.omit() %>% 
+  filter(!(animal_id %in% removal_list)) %>%
+  filter(sl_ >= 100) #%>% remove steps of less than 100m
 
 ################################ Check covariate distributions #################################
 #pivot hsi longer for graphing
-steps_long <- steps_raw %>% 
+steps_long <- steps_unscaled %>% 
   pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val")
 
 #examine distributions of covariate values for steps-- landuse looks real bad
-steps_raw %>% 
-  pivot_longer(elev_end:landuse_hii_end, names_to="cov", values_to="cov_val") %>% 
+steps_long %>% 
   ggplot() +
   geom_histogram(aes(x=cov_val))+
   facet_wrap(~cov, scales="free") 
@@ -112,7 +127,7 @@ steps_long %>%
 ################################ Prepare data to fit models #################################
 
 #unscaled step data
-steps_unscaled_nested <- steps_raw %>%
+steps_unscaled_nested <- steps_unscaled %>%
   na.omit() %>% 
   nest_by(animal_id, sex, dispersal_status) %>% 
   rename(steps=data) %>%  group_by(sex, dispersal_status)
@@ -378,10 +393,10 @@ plotly::ggplotly(rss_disp_facet_uni)
 
 #faceted by sex
 rss_sex_facet_uni <- plot_dat_uni %>% 
-  filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
-  filter(animal_id!="Sampson") %>%
-  filter(animal_id!="Kingsley") %>%
-  filter(animal_id!="Bunny") %>%
+  #filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
+  #filter(animal_id!="Sampson") %>%
+  #filter(animal_id!="Kingsley") %>%
+  #filter(animal_id!="Bunny") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
   filter(cov!="landuse_rss") %>% 
@@ -393,21 +408,17 @@ rss_sex_facet_uni <- plot_dat_uni %>%
   theme_bw() +
   facet_wrap(vars(cov, sex), scales = "free")
 
-plotly::ggplotly(rss_plot_sex_facet)
+plotly::ggplotly(rss_sex_facet_uni)
 
 #ggsave(filename= "sex_rss_facet_uni_5-06-2023.png", plot= rss_sex_facet_uni)
 
 
 ################################ Fit univariate iSSF to each individual (quadratic) #################################
 
-#unscaled step data
-steps_unscaled_nested <- steps_raw %>%
-  na.omit() %>% 
-  nest_by(animal_id, sex, dispersal_status) %>% 
-  rename(steps=data) %>%  group_by(sex, dispersal_status)
-
+#copy nested unscaled steps to new dataframe
 steps_unscaled_uni_quad <- steps_unscaled_nested
 
+#fit univariate models with quadratics to each individual
 steps_unscaled_uni_quad$fit_elev <-  map(steps_unscaled_uni_quad$steps, ~ amt::fit_issf(., case_ ~ elev_end  + I(elev_end^2) + strata(step_id_), model = TRUE))
 
 steps_unscaled_uni_quad$fit_ndvi <-  map(steps_unscaled_uni_quad$steps, ~ amt::fit_issf(., case_ ~ ndvi_end + I(ndvi_end^2) + strata(step_id_), model = TRUE))
@@ -420,114 +431,6 @@ steps_unscaled_uni_quad$fit_forest <-  map(steps_unscaled_uni_quad$steps, ~ amt:
 
 # steps_unscaled_nested$fit_landuse <-  map(steps_unscaled_nested$steps, ~ amt::fit_issf(., case_ ~ landuse_hii_end  + strata(step_id_), model = TRUE))
 
-
-#function to calculate log-rss for each univariate model applied to each individual
-l_rss_uni <- function(dat, indiv, curr_param){
-  indiv_dat <- dat %>% 
-    na.omit() %>% 
-    filter(animal_id == indiv) %>% 
-    unnest(cols=c(steps))
-  
-  if (curr_param == "elev_end"){
-    s1 <- data.frame(
-      cov <-seq(from = min(indiv_dat$elev_end, na.rm=T), to = max(indiv_dat$elev_end, na.rm=T), length.out = 200)) %>% 
-      rename(elev_end = 1)
-    
-    
-    #data frame with means of all covariates encountered by Al
-    s2 <- data.frame(
-      elev_end <-mean(indiv_dat$elev_end)) %>% 
-      rename(elev_end = 1)
-    
-    
-    indiv_dat_nested <- dat %>% 
-      na.omit() %>% 
-      filter(animal_id == indiv)
-    
-    mod <- indiv_dat_nested$fit_elev[[1]]
-  }
-  if (curr_param == "ndvi_end"){
-    s1 <- data.frame(
-      cov <-seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)) %>% 
-      rename(ndvi_end = 1)
-    
-    
-    #data frame with means of all covariates encountered by Al
-    s2 <- data.frame(
-      elev_end <-mean(indiv_dat$ndvi_end)) %>% 
-      rename(ndvi_end = 1)
-    
-    
-    indiv_dat_nested <- dat %>% 
-      na.omit() %>% 
-      filter(animal_id == indiv)
-    
-    mod <- indiv_dat_nested$fit_ndvi[[1]]
-  }
-  if (curr_param == "dist_water_end"){
-    s1 <- data.frame(
-      cov <-seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)) %>% 
-      rename(dist_water_end = 1)
-    
-    
-    #data frame with means of all covariates encountered by Al
-    s2 <- data.frame(
-      elev_end <-mean(indiv_dat$dist_water_end)) %>% 
-      rename(dist_water_end = 1)
-    
-    
-    indiv_dat_nested <- dat %>% 
-      na.omit() %>% 
-      filter(animal_id == indiv)
-    
-    mod <- indiv_dat_nested$fit_dist_water[[1]]
-  }
-  if (curr_param == "roads_hii_end"){
-    s1 <- data.frame(
-      cov <-seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)) %>% 
-      rename(roads_hii_end = 1)
-    
-    
-    #data frame with means of all covariates encountered by Al
-    s2 <- data.frame(
-      elev_end <-mean(indiv_dat$roads_hii_end)) %>% 
-      rename(roads_hii_end = 1)
-    
-    
-    indiv_dat_nested <- dat %>% 
-      na.omit() %>% 
-      filter(animal_id == indiv)
-    
-    mod <- indiv_dat_nested$fit_roads[[1]]
-  }
-  if (curr_param == "forest_end"){
-    s1 <- data.frame(
-      cov <-seq(from = min(indiv_dat$forest_end, na.rm=T), to = max(indiv_dat$forest_end, na.rm=T), length.out = 200)) %>% 
-      rename(forest_end = 1)
-    
-    
-    #data frame with means of all covariates encountered by Al
-    s2 <- data.frame(
-      elev_end <-mean(indiv_dat$forest_end)) %>% 
-      rename(forest_end = 1)
-    
-    
-    indiv_dat_nested <- dat %>% 
-      na.omit() %>% 
-      filter(animal_id == indiv)
-    
-    mod <- indiv_dat_nested$fit_forest[[1]]
-  }
-  
-  ### Working. variable names have to be the same across all data frames and model
-  l_rss_indiv <- amt::log_rss(mod, s1, s2, ci = "se", ci_level = 0.95)
-  
-  return(l_rss_indiv$df)
-}
-
-indivs <- steps_unscaled_nested %>% pull(animal_id)
-
-# #add rss tables to main data frame
 steps_unscaled_uni_quad$elev_rss_uni <- map(indivs, l_rss_uni, dat=steps_unscaled_uni_quad, curr_param="elev_end")
 
 steps_unscaled_uni_quad$ndvi_rss_uni <-map(indivs, l_rss_uni, dat=steps_unscaled_uni_quad, curr_param="ndvi_end")
@@ -647,10 +550,9 @@ plotly::ggplotly(rss_disp_uni_quad)
 
 #faceted by dispersal status
 rss_disp_facet_uni_quad <- plot_dat_uni_quad %>% 
-  filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
-  filter(animal_id!="Sampson") %>%
-  filter(animal_id!="Kingsley") %>%
-  filter(animal_id!="Bunny") %>%
+  filter(animal_id!="Roxy") %>% #remove individuals with outlying values skewing plots
+  filter(animal_id!="Sophie") %>%
+  filter(animal_id!="Jax") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
   filter(cov!="landuse_rss") %>% 
@@ -668,10 +570,9 @@ plotly::ggplotly(rss_disp_facet_uni_quad)
 
 #faceted by sex
 rss_sex_facet_uni_quad <- plot_dat_uni_quad %>% 
-  filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
-  filter(animal_id!="Sampson") %>%
-  filter(animal_id!="Kingsley") %>%
-  filter(animal_id!="Bunny") %>%
+  filter(animal_id!="Roxy") %>% #remove individuals with outlying values skewing plots
+  filter(animal_id!="Sophie") %>%
+  filter(animal_id!="Jax") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
   filter(cov!="landuse_rss") %>% 
@@ -985,16 +886,17 @@ for(i in 1:nrow(plot_dat)){
 }
 
 
+plot_dat$cov_vals <- ls
+plot_dat$rss_vals <- ls2
 
 #add lists from for loop to data frame and facet plot by sex (Melodie's RSS values don't make any sense)
 rss_plot_sex <- plot_dat %>% 
-  mutate(cov_vals = ls,
-         rss_vals = ls2) %>% 
   filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
   filter(animal_id!="Sampson") %>%
   filter(animal_id!="Kingsley") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
+  unnest() %>%
   ggplot(., aes(x = cov_vals, y = rss_vals)) +
   geom_smooth(aes(pch=animal_id, color=sex),linewidth = 1) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
@@ -1007,11 +909,9 @@ plotly::ggplotly(rss_plot_sex)
 
 #add lists from for loop to data frame and facet plot by sex (Melodie's RSS values don't make any sense)
 rss_plot_sex_facet <- plot_dat %>% 
-  mutate(cov_vals = ls,
-         rss_vals = ls2) %>% 
-  filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
-  filter(animal_id!="Sampson") %>%
-  filter(animal_id!="Kingsley") %>%
+  filter(animal_id!="Roxy") %>% #remove individuals with outlying values skewing plots
+  filter(animal_id!="Sophie") %>%
+  filter(animal_id!="Jax") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
   filter(cov!="landuse_rss") %>% 
@@ -1027,8 +927,6 @@ plotly::ggplotly(rss_plot_sex_facet)
 
 #add lists from for loop to data frame and facet plot by dispersal status
 rss_plot_disp <- plot_dat %>% 
-  mutate(cov_vals = ls,
-         rss_vals = ls2) %>% 
   filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
   filter(animal_id!="Sampson") %>%
   filter(animal_id!="Kingsley") %>%
@@ -1046,12 +944,9 @@ plotly::ggplotly(rss_plot_disp)
 
 #add lists from for loop to data frame and facet plot by dispersal status
 rss_plot_disp_facet <- plot_dat %>% 
-  mutate(cov_vals = ls,
-         rss_vals = ls2) %>% 
-  filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
-  filter(animal_id!="Sampson") %>%
-  filter(animal_id!="Kingsley") %>%
-  filter(animal_id!="Bunny") %>%
+  filter(animal_id!="Roxy") %>% #remove individuals with outlying values skewing plots
+  filter(animal_id!="Sophie") %>%
+  filter(animal_id!="Jax") %>%
   select(-rss_val) %>% 
   unnest(cols=c(cov_vals, rss_vals)) %>% 
   filter(cov!="landuse_rss") %>% 
