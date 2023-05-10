@@ -28,7 +28,7 @@ rand_steps <- 10
 
 ############################### Import Location Data #################################
 # Mountain lion location data (November 2022)
-locs_raw <- read_csv("data/Location Data/Source Files/locations_master/all_locations_trimmed_2022-11-06.csv")
+locs_raw <- read_csv("data/Location Data/Source Files/locations_master/locations_screened_5-9-2023.csv")
 
 # Mountain lion deployments  (September 2022)
 deployments <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/OCP_Cougar_Deployments_9-30-22.csv")
@@ -76,11 +76,6 @@ locs <- locs_raw %>%
 #nest locations into list columns by animal_id
 locs_nested <- locs %>% nest_by(animal_id)
 
-# test <- locs %>% 
-#   filter(animal_id=="Al") %>% 
-#   st_as_sf(coords=c("longitude", "latitude"), crs =4326)
-# 
-# mapview(test$geometry)
 
 #add columns for sex and dispersal status to nested locations 
 locs_nested <- locs_nested %>% 
@@ -164,7 +159,7 @@ steps_6h <- function(x) {
     amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
     amt::filter_min_n_burst() %>% #divide into bursts of min 3 pts
     amt::steps_by_burst() %>%  #convert to steps
-    amt::random_steps() %>% #generate 10 random steps per used step
+    amt::random_steps(n_control = rand_steps) %>% #generate 10 random steps per used step
     amt::extract_covariates(cov_stack, where = "both") %>% #extract covariates at start and end
     #amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
@@ -184,15 +179,14 @@ amt_steps <- amt_locs %>%
          steps) %>% 
   unnest(cols=c(steps))
 
+
 #scale covariates (optional)
-amt_steps_scaled <- amt_steps %>%
-  mutate(across(elev_start:landuse_hii_end, scale)) %>%
-  mutate(across(elev_start:landuse_hii_end, as.numeric))
+# amt_steps_scaled <- amt_steps %>%
+#   mutate(across(elev_start:landuse_hii_end, scale)) %>%
+#   mutate(across(elev_start:landuse_hii_end, as.numeric))
 
 
-
-# amt_steps_scaled %>% unnest(cols=steps) %>% 
-#write_csv(amt_steps_scaled, "6h_steps_scaled_cov_4-28-2023.csv")
+#write_csv(amt_steps, "6h_steps_unscaled_cov_5-09-2023.csv")
 
 
 

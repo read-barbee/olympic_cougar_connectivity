@@ -1,8 +1,8 @@
-#### OCP iSSF Module_03: Explore Inidivual Variation in Selection--Unscaled, Quadratic ####
+#### OCP iSSF Module_03: Explore Inidivual Variation in Selection--Muff ####
 
 # Author: Read Barbee
 
-# Date:2023-05-02 
+# Date:2023-05-08 
 
 # Inputs:
 #   •	GPS2: Unscaled amt data frame for fitting iSSFs
@@ -37,25 +37,50 @@ library(sjPlot)
 
 ############################### Import amt-formatted Data #################################
 # Import SSF data for 100 individual mountain lions (November 2022)
-steps_raw <- read_csv("6h_steps_cov_4-28-2023.csv")
+steps_raw <- read_csv("6h_steps_unscaled_cov_5-09-2023.csv")
 
 
 
 ################################ Prepare data to fit models #################################
 
+date_filter <-  interval(start=min(steps_raw$t1_), end=max(steps_raw$t2_))
+
+#individuals with <100 steps or <100 days of steps
+# removal_list <- steps_raw %>%
+#   group_by(animal_id) %>%
+#   distinct(step_id_) %>%
+#   count() %>%
+#   filter(n<100) %>%
+#   pull(animal_id)
+
+
+#make list of individuals with < 100 steps and <100 days of steps
+removal_list <- steps_raw %>%
+  group_by(animal_id) %>%
+  mutate(date_range=interval(start=min(t1_), end=max(t2_)),
+         step_days = as.duration(date_range)/ddays(1)) %>% 
+  distinct(step_id_, .keep_all = TRUE) %>% 
+  summarize(n=n(), step_days = round(first(step_days), 0)) %>%
+  filter(n<100 & step_days <= 100) %>%
+  pull(animal_id)
+
+
 #unscaled step data
-steps_unscaled_nested <- steps_raw %>%
+steps_unscaled <- steps_raw %>%
   na.omit() %>% 
-  nest_by(animal_id, sex, dispersal_status) %>% 
-  rename(steps=data) %>%  group_by(sex, dispersal_status)
+  filter(!(animal_id %in% removal_list)) %>%
+  filter(sl_ >= 100) #%>% remove steps of less than 100m
+  # nest_by(animal_id, sex, dispersal_status) %>% 
+  # rename(steps=data) %>%  group_by(sex, dispersal_status)
 
 #scaled step data
 steps_scaled<- steps_raw %>%
   mutate(across(elev_start:landuse_hii_end, scale)) %>%
   mutate(across(elev_start:landuse_hii_end, as.numeric))%>%
-  na.omit()
-  # nest_by(animal_id, sex, dispersal_status) %>%
-  # rename(steps=data)
+  na.omit() %>%  
+  filter(!(animal_id %in% removal_list)) #%>% 
+  #filter(sl_ >= 100)
+
 
 males_scaled <- steps_scaled %>% 
   filter(sex=="Male")
@@ -74,20 +99,22 @@ residents_scaled <- steps_scaled %>%
 
 ################################ Set model formulas #################################
 
+#Removed step length and log step length due to convergence issue for males and residents
+
 #All individuals
-TMB_full <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + sl_ + log(sl_) + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = steps_scaled, doFit = FALSE)
+TMB_full <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end  + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = steps_scaled, doFit = FALSE)
 
 #Males
-TMB_males <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + sl_ + log(sl_) + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = males_scaled, doFit = FALSE)
+TMB_males <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end +  (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = males_scaled, doFit = FALSE)
 
 #Females
-TMB_females <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + sl_ + log(sl_) + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = females_scaled, doFit = FALSE)
+TMB_females <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end  + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = females_scaled, doFit = FALSE)
 
 #Residents
-TMB_residents <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + sl_ + log(sl_) + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = residents_scaled, doFit = FALSE)
+TMB_residents <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end +  (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = residents_scaled, doFit = FALSE)
 
 #Dispersers
-TMB_dispersers <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end + sl_ + log(sl_) + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = dispersers_scaled, doFit = FALSE)
+TMB_dispersers <- glmmTMB(case_ ~ elev_end + ndvi_end + dist_water_end + roads_hii_end + forest_end  + (1|animal_id) + (0 + elev_end|animal_id) + (0 + ndvi_end|animal_id) + (0 + dist_water_end|animal_id) + (0 + roads_hii_end|animal_id) + (0 + forest_end|animal_id), family = poisson, data = dispersers_scaled, doFit = FALSE)
 
 
 #set variance parameter theta to extremely large value
@@ -128,10 +155,28 @@ summary(dispersers_fit)
 ################################ Plots #################################
 
 #intercept and coefficient estimates for all males
-sjPlot::plot_model(males_fit, type="re")
+sjPlot::plot_model(males_fit, type="re",
+                   transform=NULL,
+                   axis.title = "Coefficient Estimates (Untransformed)",
+                   title = "Individual Coefficient Estimates for Males (Untransformed)")
 
 #intercept and coefficient estimates for all females
-sjPlot::plot_model(females_fit, type="re")
+sjPlot::plot_model(females_fit, type="re",
+                   transform=NULL,
+                   axis.title = "Coefficient Estimates (Untransformed)",
+                   title = "Individual Coefficient Estimates for Females (Untransformed)")
+
+#intercept and coefficient estimates for all residents
+sjPlot::plot_model(residents_fit, type="re",
+                   transform=NULL,
+                   axis.title = "Coefficient Estimates (Untransformed)",
+                   title = "Individual Coefficient Estimates for Residents (Untransformed)")
+
+#intercept and coefficient estimates for all dispersers
+sjPlot::plot_model(dispersers_fit, type="re",
+                   transform=NULL,
+                   axis.title = "Coefficient Estimates (Untransformed)",
+                   title = "Individual Coefficient Estimates for Dispersers (Untransformed)")
 
 #coefficient estimates for all individuals
 plot_model(full_fit, 
