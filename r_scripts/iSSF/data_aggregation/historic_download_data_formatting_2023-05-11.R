@@ -3,9 +3,8 @@
 
 #Author: Read Barbee
 
-#Date: 2022-10-03
+#Date: 2023-05-11
 
-#Updated: 11-06-2022: fixed date-time issue for historic downloads where time was excluded
 
 #Purpose: Filter for collared dates and combine and format files from retrieved collar downloads. Get everything into Movebank format.
 
@@ -129,42 +128,43 @@ f3_formatted <- hist_form3 %>%
 
   
 
-#failing due to parsing errors in local time. RESUME HERE###
 f4_formatted <- hist_form4 %>% 
   mutate(collar_id= as.character(collar_id),
-         date_time_local = force_tz(mdy_hms(paste0(lmt_date," ",lmt_time)), tzone= "US/Pacific"),
          date_time_utc = mdy_hms(paste0(gmt_date," ",gmt_time, tz= "UTC")),
+         date_time_local = with_tz(date_time_utc, tzone= "US/Pacific"),
          deployment_id = paste0(animal_id,"_",collar_id),
-         fix_type = case_when(nav =="No" ~ NA_character_)) %>%
-  select(deployment_id, animal_id_2, collar_id, date_time_utc, date_time_local, latitude:fix_type) %>% 
-  rename(animal_id = animal_id_2,
-         altitude = height_m)
+         fix_type = case_when(nav == "3D" ~ "3D",
+                              nav == "2D" ~ "2D",
+                              nav =="No" ~ NA_character_)) %>%
+  rename(altitude = height) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop, fix_type)
+
+
 
 
 f5_formatted <- hist_form5 %>% 
-  clean_names() %>% 
-  mutate(date_time_gmt= dmy_hms(paste(gmt_date_dmy, gmt_time)),
-         collar_id=as.character(collar_id),
-         sats_used=as.character(sats_used)) %>% 
-  select(animal_id, collar_id, date_time_gmt, latitude:sats_used, temp, main_vol, bu_vol ) %>% 
-  rename(altitude_m = height,
-         fix_type = nav,
-         temp_c=temp,
-         main_v=main_vol,
-         back_v= bu_vol) %>% 
-  replace_with_na(replace = list(fix_type ="No")) %>% 
-  relocate(c(sats_used, validated), .after = back_v)
+  mutate(collar_id= as.character(collar_id),
+         date_time_utc = dmy_hms(paste0(gmt_date_dmy," ",gmt_time, tz= "UTC")),
+         date_time_local = force_tz(dmy_hms(paste0(lmt_date_dmy, " ", lmt_time)), tzone="US/Pacific"),
+         deployment_id = paste0(animal_id,"_",collar_id),
+         fix_type = case_when(nav == "3D" ~ "3D",
+                              nav == "2D" ~ "2D",
+                              nav =="No" ~ NA_character_)) %>%
+  rename(altitude = height) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop, fix_type)
 
+#MISSING DOP SCORES****
 #The datetime "3/10/19 02:00:42" PST fails to parse because tunes between 02:00:00 and 02:59:59 are considered invalid on the day of daylight savings change, which was 3/10/19
 f6_formatted <- hist_form6 %>% 
   clean_names() %>% 
   mutate(date_time_lmt = mdy_hms(str_c(lmt_date, lmt_time, sep=" "),
-                                tz = "America/Los_Angeles")) %>% 
+                                tz = "US/Pacific")) %>% 
   mutate(date_time_gmt = with_tz(date_time_lmt, tzone= "UTC"),
          collar_id = as.character(collar_id)) %>% 
   select(animal_id, collar_id, date_time_gmt, latitude, longitude)
 
 
+#MISSING DOP SCORES****
 f7_formatted <- hist_form7 %>% 
   clean_names() %>% 
   filter(!is.na(animal_id)) %>% 
@@ -190,17 +190,16 @@ f7_formatted <- hist_form7 %>%
 
 
 makah_formatted <- makah_form %>% 
-  clean_names() %>%
-  rename(latitude=latitude_wgs84,
-         longitude=longitude_wgs84,
-         altitude_m=elevation,
-         fix_type=nav) %>% 
-  mutate(date_time_gmt= mdy_hms(str_c(gmt_date, gmt_time, sep=" ")),
-         fix_type = ifelse(fix_type=="3", "3D", "2D"))%>% 
-  select(animal_id,
-         collar_id,
-         date_time_gmt,
-         latitude:sats_used)
+  mutate(collar_id= as.character(collar_id),
+         date_time_utc = mdy_hms(paste0(gmt_date," ",gmt_time, tz= "UTC")),
+         date_time_local = force_tz(mdy_hms(paste0(lmt_date, " ", lmt_time)), tzone="US/Pacific"),
+         deployment_id = paste0(animal_id,"_",collar_id),
+         fix_type = case_when(nav == "3" ~ "3D",
+                              nav == "2" ~ "2D")) %>%
+  rename(altitude = elevation,
+         latitude = latitude_wgs84,
+         longitude = longitude_wgs84) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop,fix_type)
   
   
 
