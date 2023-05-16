@@ -29,7 +29,7 @@ library(janitor)
 ################################## Step 1: Import and format web location data ###########################
 
 #Import all lotek web data and format columns
-lotek_complete_raw <- read_csv("data/Location Data/Raw Data/Lotek/Lotek_complete_download_raw_2023-05-11.CSV") %>% 
+lotek_complete_raw <- read_csv("data/Location Data/Raw Data/Lotek/Lotek_complete_download_raw_2023-05-16.CSV") %>% 
   clean_names() %>% 
   mutate(device_id = as.character(device_id),
          date_time_local = force_tz(date_time_local, tzone="US/Pacific"),
@@ -43,7 +43,7 @@ lotek_complete_raw <- read_csv("data/Location Data/Raw Data/Lotek/Lotek_complete
 
 
 #Import all vectronic data and format columns
-vec_complete_raw <- read_csv("data/Location Data/Raw Data/Vectronics/Vectronic_complete_download_raw_2023-05-11.csv") %>%
+vec_complete_raw <- read_csv("data/Location Data/Raw Data/Vectronics/Vectronic_complete_download_raw_2023-05-16.csv") %>%
   clean_names() %>% 
   #filter(mortality_status == "Nothing Detected" | is.na(mortality_status==TRUE)) %>% #remove mortality points
   select(-c(scts_utc, origin, mortality_status:animal)) %>% 
@@ -83,7 +83,7 @@ dep_collars <- cougar_deployments %>% distinct(collar_id) %>% pull()
 setdiff(web_collars, dep_collars) #77 collar ids are in web data but not in deployment list
 setdiff(dep_collars, web_collars) #31 collar ids are in deployment list but not in web data
 
-#Filter location data only for collars in deployment list: removes 77 collar IDs from GPS data
+#Filter location data only for collars in deployment list: removes 77 collar IDs from GPS data. Includes collars from previous projects, bobcat collars, and undeployed collars
 web_filtered <- web_raw %>% 
   filter(collar_id %in% dep_collars) 
 
@@ -143,17 +143,29 @@ web_all <- bind_rows(trimmed_deployments)
 web_final <- web_all %>% 
   filter(!(deployment_id %in% downloaded_deployments))
 
-web_final %>% distinct(deployment_id) %>% count() #web final has 125 distinct deployments
+web_final %>% distinct(deployment_id) %>% count() #web final has 121 distinct deployments instead of previous 125 because of additional downloaded deployments received from Kim on 5-15-2023.
 
-#check to make sure only the 12 downloaded collars were removed
+#check to make sure only the 17 downloaded collars were removed
 setdiff(web_all$deployment_id, web_final$deployment_id)
 
-#only 11 out of 12 removed becaue Lilu 87524 not on web
+#only 15 out of 17 removed becaue Lilu 87524 and Gypsy 3468 not on web
 
 
 #export to csv
-#write_csv(web_final, "data/Location Data/Source Files/web_source_5-11-2023.csv")
+#write_csv(web_final, "data/Location Data/Source Files/web_source_5-16-2023.csv")
 
+
+
+
+#make sure that all collar IDs not on the web are accounted for in historic downloads:
+
+historic_downloads <- c("28360", "82112", "82111", "80464", "80462", "81660", "80463", "32156", "33432", "32153", "32248", "38018", "32244", "38015", "32246", "32245", "38019", "28358", "28359", "34639", "28361", "28362","99999991", "99999992", "99999993", "99999994", "99999995", "99999996", "99999997", "99999998" )
+
+not_on_web <- setdiff(dep_collars, web_collars)
+
+setdiff(not_on_web, historic_downloads)
+
+#the only diff is 34638, which is in the collar downloads
 
 
 

@@ -72,6 +72,13 @@ makah_form <- list.files(
   map_df(~read_csv(., col_types = list(Sats_Used = col_character()))) %>% 
   clean_names()
 
+pre_formatted <- list.files(
+  path="/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Raw Data/Historic Downloads/pre-formatted/", 
+  pattern = "*.csv",
+  full.names = TRUE) %>% 
+  map_df(~read_csv(., col_types = list(fix_type = col_character()))) %>% 
+  clean_names()
+
 
 
 #######Standardize formatting of historical downloads#########
@@ -153,40 +160,33 @@ f5_formatted <- hist_form5 %>%
   rename(altitude = height) %>% 
   select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop, fix_type)
 
-#MISSING DOP SCORES****
-#The datetime "3/10/19 02:00:42" PST fails to parse because tunes between 02:00:00 and 02:59:59 are considered invalid on the day of daylight savings change, which was 3/10/19
+# use force_tz for dates considered invalid on the day of daylight savings change in pacific time zone
+# using utc for lmt columng because the existing lmt times are the same as utc in the file %>% 
 f6_formatted <- hist_form6 %>% 
-  clean_names() %>% 
-  mutate(date_time_lmt = mdy_hms(str_c(lmt_date, lmt_time, sep=" "),
-                                tz = "US/Pacific")) %>% 
-  mutate(date_time_gmt = with_tz(date_time_lmt, tzone= "UTC"),
-         collar_id = as.character(collar_id)) %>% 
-  select(animal_id, collar_id, date_time_gmt, latitude, longitude)
+  mutate(collar_id = as.character(collar_id),
+         date_time_utc = mdy_hms(paste0(utc_date," ",utc_time), tz="UTC"),
+         date_time_local = with_tz(mdy_hms(paste0(utc_date," ",utc_time)), tzone="US/Pacific"),
+         deployment_id = paste0(animal_id,"_",collar_id),
+         fix_type = case_when(
+           fix_type %in% c("val. GPS-3D", "GPS-3D") ~ "3D",
+           fix_type == "GPS-2D" ~ "2D",
+           fix_type == "No Fix" ~ NA_character_)) %>% 
+  rename(altitude = height_m) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop, fix_type)
 
 
-#MISSING DOP SCORES****
+# using utc for lmt columng because the existing lmt times are the same as utc in the file
 f7_formatted <- hist_form7 %>% 
-  clean_names() %>% 
-  filter(!is.na(animal_id)) %>% 
-  select(-time_lmt) %>% 
-  mutate(date_time_gmt = mdy_hm(time_utc)) %>% 
-  rename(longitude = longitude_deg,
-         latitude = latitude_deg,
-         fix_type=status,
-         temp_c= temperature_c) %>% 
-  mutate(validated = ifelse(str_detect(fix_type, "val"), "Yes", "No"),
-         fix_type = case_when(fix_type == "val. GPS-3D" | fix_type == "GPS-3D" ~ "3D", fix_type=="GPS-2D" ~ "2D", fix_type=="No Fix" ~ NA_character_),
-         collar_id=as.character(collar_id)) %>% 
-  select(animal_id, 
-         collar_id, 
-         date_time_gmt, 
-         latitude, 
-         longitude,
-         altitude_m, 
-         fix_type, 
-         main_v, 
-         temp_c, 
-         validated)
+  mutate(collar_id = as.character(collar_id),
+         date_time_utc = mdy_hms(paste0(utc_date," ",utc_time), tz="UTC"),
+         date_time_local = with_tz(mdy_hms(paste0(utc_date," ",utc_time)), tzone="US/Pacific"),
+         deployment_id = paste0(animal_id,"_",collar_id),
+         fix_type = case_when(
+           fix_type %in% c("val. GPS-3D", "GPS-3D") ~ "3D",
+           fix_type == "GPS-2D" ~ "2D",
+           fix_type == "No Fix" ~ NA_character_)) %>% 
+  rename(altitude = height_m) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop, fix_type)
 
 
 makah_formatted <- makah_form %>% 
@@ -201,6 +201,14 @@ makah_formatted <- makah_form %>%
          longitude = longitude_wgs84) %>% 
   select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop,fix_type)
   
+
+pre_formatted2 <- pre_formatted %>% 
+  mutate(collar_id = as.character(collar_id),
+         lmt_date_time = with_tz(lmt_date_time, tzone="US/Pacific"),
+         deployment_id =  paste0(animal_id,"_",collar_id)) %>% 
+  rename(date_time_utc = utc_date_time,
+         date_time_local = lmt_date_time) %>% 
+  select(deployment_id, animal_id, collar_id, date_time_utc, date_time_local, latitude, longitude, altitude, dop,fix_type)
   
 
 
@@ -212,20 +220,16 @@ hist_combined <- bind_rows(f1_formatted,
                            f5_formatted, 
                            f6_formatted,
                            f7_formatted,
-                           makah_formatted)
+                           makah_formatted,
+                           pre_formatted2)
 
-#add deplooyment_id column
 
-hist_combined <- hist_combined %>% 
-  mutate(deployment_id = paste0(animal_id,"_",collar_id)) %>% 
-  select(deployment_id, everything())
+get_dupes(hist_combined, animal_id, collar_id, date_time_utc) #no_dupes, we good
 
-get_dupes(hist_combined, animal_id, date_time_gmt) #no_dupes, we good
+#check deployments (n=33)
+hist_combined %>% distinct(deployment_id)
 
-#check deployments
-unique(hist_combined$deployment_id)
-
-#write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/Formatted/hist_downloads_final_2022-11-06.csv")
+write_csv(hist_combined, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Source Files/hist_source_5-16-2023.csv")
 
 
 
