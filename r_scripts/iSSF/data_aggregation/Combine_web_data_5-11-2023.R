@@ -105,14 +105,14 @@ extract_deployments <- function(data_p, animal_id_p, collar_id_p, start_date_p, 
   if (is.na(end_date_p) == TRUE){ #don't filter by end date if it's not included
     trimmed_track <- data_p %>% 
       filter(collar_id == collar_id_p) %>% 
-      filter(date_time_local>= as.POSIXct(start_date_p)) %>% 
+      filter(date_time_local>= ymd(start_date_p)) %>% 
       mutate(animal_id = animal_id_p,
              deployment_id = paste0(animal_id_p,"_",collar_id_p)) %>% 
       select(deployment_id, animal_id, everything())
   } else{
     trimmed_track <- data_p %>% 
       filter(collar_id == collar_id_p) %>% 
-      filter(date_time_local>= as.POSIXct(start_date_p) & date_time_local<=as.POSIXct(end_date_p)) %>% 
+      filter(date_time_local>= ymd(start_date_p) & date_time_local<=ymd(end_date_p)) %>% 
       mutate(animal_id = animal_id_p,
              deployment_id = paste0(animal_id_p,"_",collar_id_p)) %>% 
       select(deployment_id, animal_id, everything())
