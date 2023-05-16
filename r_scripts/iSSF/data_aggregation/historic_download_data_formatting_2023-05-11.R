@@ -11,7 +11,7 @@
 library(tidyverse)
 library(lubridate)
 library(janitor)
-library(naniar)
+
 
 
 #Import historical downloads grouped in the 4 formats
@@ -98,8 +98,8 @@ pre_formatted <- list.files(
 
 f1_formatted <- hist_form1 %>% 
   mutate(collar_id= as.character(collar_id),
-         date_time_local = force_tz(mdy_hms(paste0(lmt_date," ",lmt_time)), tzone="US/Pacific"),
          date_time_utc = mdy_hms(utc_date_time, tz= "UTC"),
+         date_time_local = with_tz(date_time_utc, tzone="US/Pacific"),
          deployment_id = paste0(animal_id_2,"_",collar_id),
          fix_type = case_when(fix_type %in% c("val. GPS-3D", "GPS-3D") ~ "3D",
                               fix_type %in% c("GPS-2D") ~ "2D",
@@ -114,7 +114,7 @@ f2_formatted <- hist_form2 %>%
   mutate( animal_id = str_replace(animal_id, " ", "_"),
           collar_id=as.character(collar_id),
           date_time_utc = mdy_hms(paste0(date_gmt, " ", time_gmt), tz="UTC"),
-          date_time_local = force_tz(mdy_hms(paste0(date_local, " ", time_local)), tzone="US/Pacific"), 
+          date_time_local = with_tz(date_time_utc, tzone="US/Pacific"), 
           deployment_id = paste0(animal_id,"_",collar_id),
           fix_type= case_when(fix_status %in% c("3D Fix-V", "3D Fix", "4 or more SV KF", "3-D least-squares") ~ "3D",
                               fix_status %in% c("2D Fix", "2-D least-squares", "3_SV KF") ~ "2D",
