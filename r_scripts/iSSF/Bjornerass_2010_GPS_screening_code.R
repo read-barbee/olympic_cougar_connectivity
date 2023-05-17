@@ -41,13 +41,13 @@
 
 ### Define Parameters
 
-medcrit = ""
-
-meancrit = ""
-
-spikesp = ""
-
-spikecos = ""
+# medcrit = ""
+# 
+# meancrit = ""
+# 
+# spikesp = ""
+# 
+# spikecos = ""
 
 
 
