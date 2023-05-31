@@ -21,19 +21,19 @@ library(janitor)
 
 
 ################################ Import Source Files #################################
-web_source <- read_csv("data/Location Data/Source Files/web_source_5-16-2023.csv", col_types = list(fix_type = col_character(),
+web_source <- read_csv("data/Location_Data/Source_Files/web_source_5-16-2023.csv", col_types = list(fix_type = col_character(),
                                                                                                     collar_id = col_character())) %>% 
   mutate(source = "web")
 
-hist_source <- read_csv("data/Location Data/Source Files/hist_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
+hist_source <- read_csv("data/Location_Data/Source_Files/hist_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
                                                                                                      collar_id = col_character())) %>% 
   mutate(source = "historic")
 
-collar_source <- read_csv("data/Location Data/Source Files/collar_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
+collar_source <- read_csv("data/Location_Data/Source_Files/collar_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
                                                                                                          collar_id = col_character())) %>% 
   mutate(source = "collar_download")
 
-deployments_master <- read_csv("data/Location Data/Metadata/From Teams/Formatted for R/collar_deployments_master_5-11-2023.csv") %>%
+deployments_master <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/collar_deployments_master_5-11-2023.csv") %>%
   mutate(deployment_id = paste0(name,"_",collar_id), .before=name) %>% distinct(deployment_id) %>% pull()
 
 ################################ Combine into single data frame #################################
@@ -64,7 +64,16 @@ locs_all <- locs_all %>%
   mutate(date_time_utc = as.character(date_time_utc),
          date_time_local = as.character(date_time_local))
 
-write_csv(locs_all, "data/Location Data/Source Files/locations_master/gps_locs_master_5-16-2023.csv")
+#check to make sure all necessary fields are complete
+summary(locs_all)
+
+#21 locations have coordinates but NA for dop because of excel find and replace. All of those NA should be 0 to keep the column numeric for filtering
+locs_all %>% filter(!is.na(latitude) & is.na(dop))
+
+#replace all NAs in dop column with 0
+locs_all <- locs_all %>% mutate(dop=replace_na(dop, 0))
+
+write_csv(locs_all, "data/Location_Data/Source_Files/locations_master/gps_locs_master_5-16-2023.csv")
 
 
 #create a file detailing the source file for each deployment
