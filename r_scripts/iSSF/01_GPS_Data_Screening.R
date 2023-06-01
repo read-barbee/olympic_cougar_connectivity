@@ -31,13 +31,13 @@ library(janitor)
 
 ############################### Import Location Data #################################
 # Mountain lion location data (November 2022)
-locs_raw <- read_csv("data/Location Data/Source Files/locations_master/all_locations_trimmed_2022-11-06.csv")
+locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_master_5-16-2023.csv")
 
 # Mountain lion deployments  (September 2022)
-deployments <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/OCP_Cougar_Deployments_9-30-22.csv")
+deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/collar_deployments_master_5-11-2023.csv")
 
 # Dispersal inventory from Teams (3-13-2023)
-dispersals <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Dispersals_03-13-2023.csv")
+dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/dispersals_master_5-11-2023.csv")
 
 
 ############################### Data Diagnostics #################################

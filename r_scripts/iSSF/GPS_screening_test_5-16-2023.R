@@ -10,18 +10,25 @@
 
 
 ################################ Set screening parameters #################################
-delta =100000
-mu = 10000
+#max distance (meters) animal can move during maximum fix interval (4 hours)
+delta =100000 #100km
+
+#max distance (meters) animal can move from the mean of points in moving window within max fix interval (4 hours)
+#window = 21 fixes: 10 before, the current location, 10 after
+mu = 10000 #
+
+#max incoming/outgoing speed (m/hr)
 alpha = 1500
-theta = (-0.97)
+
+#minimum cosine of turn angle (combined with max speed to determine spikes)
+theta = (-0.97) #166 to 194 degrees
 
 ################################ Load libraries and import data #################################
 library(tidyverse)
 library(sf)
 
 
-data_raw <- read_csv("data/Location Data/Source Files/locations_master/gps_locs_master_5-16-2023.csv") %>% 
-  filter(!is.na(latitude))
+data_raw <- read_csv("data/Location Data/Source Files/locations_master/gps_locs_master_5-16-2023.csv") %>% filter(!is.na(latitude))
 
 #load bjornerass script as function
 source("r_scripts/iSSF/Bjornerass_2010_GPS_screening_function.R")

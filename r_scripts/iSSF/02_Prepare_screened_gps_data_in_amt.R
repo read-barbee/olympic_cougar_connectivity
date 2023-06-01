@@ -28,13 +28,13 @@ rand_steps <- 10
 
 ############################### Import Location Data #################################
 # Mountain lion location data (November 2022)
-locs_raw <- read_csv("data/Location Data/Source Files/locations_master/locations_screened_5-9-2023.csv")
+locs_raw <- read_csv("data/Location Data/Source Files/locations_master/gps_locs_master_5-16-2023.csv", col_types = list(fix_type = col_character()))
 
 # Mountain lion deployments  (September 2022)
-deployments <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/OCP_Cougar_Deployments_9-30-22.csv")
+deployments <- read_csv("data/Location Data/Metadata/From Teams/Formatted for R/collar_deployments_master_5-11-2023.csv")
 
 # Dispersal inventory from Teams (3-13-2023)
-dispersals <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location Data/Dispersals_03-13-2023.csv")
+dispersals <- read_csv("data/Location Data/Metadata/From Teams/Formatted for R/dispersals_master_5-11-2023.csv")
 
 ############################### Import Covariate Data #################################
 
@@ -69,8 +69,8 @@ dem_cats <- first_deps %>%
 
 #remove missing locations and convert GMT timestamp to local time
 locs <- locs_raw %>% 
-  mutate(date_time_local = with_tz(date_time_gmt,"US/Pacific"), 
-         .after=date_time_gmt) %>% 
+  mutate(date_time_utc = mdy_hms(date_time_utc, tz= "UTC", truncated = 3),
+         date_time_local = mdy_hms(date_time_local, tz= "US/Pacific", truncated = 3)) %>% 
   filter(!is.na(latitude))
 
 #nest locations into list columns by animal_id
@@ -99,8 +99,6 @@ locs_nested$tracks <- map(locs_nested$data, multi_track)
 
 dispersers <- locs_nested %>% 
   filter(dispersal_status=="disperser")
-
-
 
 
 
@@ -136,17 +134,18 @@ locs_nested_test %>%
   filter(nrow(steps)==0) %>% 
   select(steps)
 
+#make list of individuals to remove (because they can't be resampled at 6 hours)
 indiv_to_remove <- locs_nested_test %>% 
   filter(nrow(steps)==0) %>% 
   pull(animal_id)
 
 
-#1 hour removes 69 individuals (n=40)
-#2 hour removes 32 individuals (n=77)
-#3 hours removes 32 individuals (n=77)
-#4 hours removes 33 individuals (n=76)
-#5 hours removes 63 individuals (n=46)
-#6 hours removes 8 individuals (n=101)
+#1 hour removes 66 individuals 
+#2 hour removes 31 individuals 
+#3 hours removes 28 individuals 
+#4 hours removes 32 individuals 
+#5 hours removes 61 individuals 
+#6 hours removes 9 individuals 
 
 #6 hours retains the most individuals
 
@@ -179,6 +178,14 @@ amt_steps <- amt_locs %>%
          steps) %>% 
   unnest(cols=c(steps))
 
+#don't seem to be moving more than 10 km in 6 hours
+amt_steps %>% 
+  filter(case_==TRUE) %>% 
+  filter(sl_<15000) %>% 
+  pull(sl_) %>%
+  hist()
+
+hist(amt_steps$ta_)
 
 #scale covariates (optional)
 # amt_steps_scaled <- amt_steps %>%
