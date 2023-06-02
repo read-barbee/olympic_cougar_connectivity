@@ -2,9 +2,34 @@
 
 # Author: Read Barbee
 
-# Date:2023-04-28 
+# Date:2023-06-02 
 
-# Purpose: Prepare screened GPS data in amt to fit iSSFs. Note, data are not yet actually screened.
+# Purpose: Prepare screened GPS data in amt to fit iSSFs.
+
+# Inputs:
+#   •	Screened GPS Locations (corrected for error and habitat bias)
+#   •	Deployment list
+#   •	Disperser list
+#   •	Covariate Stack
+#
+# Outputs:
+#   •	amt_step dataframe with fields for all necessary covariates
+
+#Steps
+# •	Import location and covariate data
+# •	Set time zones
+# •	Formatting: Nest locations by individual and join columns for sex and dispersal status 
+# •	Generate amt tracks for each individual
+# •	Examine sampling rates and identify resampling interval to retain the most individuals
+# •	Remove individuals not compatible with that resampling interval
+# •	Resample tracks, generate used and random steps, and extract covariate values for end of each step
+# •	Filter steps to remove outliers and stationary steps (100 m < sl_ < 20,000 m )
+# •	Transform aspect to continuous easting and northing values
+# •	Define USFS landcover and landuse categories
+# •	Derive covariates for climatic season, hunting season, and calving season
+# •	Round all floating hii values to integers
+# •	reorder columns and export to csv
+
 
 
 ################################ Libraries #################################
@@ -13,35 +38,68 @@ library(terra)
 library(lubridate)
 library(amt)
 library(janitor)
+library(DataExplorer)
+library(future)
 # library(sf)
 # library(mapview)
 
 ################################ User-Defined Parameters #################################
 
-project_crs <- "epsg:5070"
+project_crs <- "epsg:5070" #NAD83 Albers Equal Area Projection
 
 resample_int_hours <- 6
 
-tolerance <- minutes(15)
+tolerance_mins <- 15
 
-rand_steps <- 10
+rand_steps <- 20
 
 ############################### Import Location Data #################################
-# Mountain lion location data (November 2022)
-locs_raw <- read_csv("data/Location Data/Source Files/locations_master/gps_locs_master_5-16-2023.csv", col_types = list(fix_type = col_character()))
+# Mountain lion location data (May 2023)
+locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_6-1-2023.csv", col_types = list(fix_type = col_character()))
 
 # Mountain lion deployments  (September 2022)
-deployments <- read_csv("data/Location Data/Metadata/From Teams/Formatted for R/collar_deployments_master_5-11-2023.csv")
+deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/collar_deployments_master_5-11-2023.csv")
 
 # Dispersal inventory from Teams (3-13-2023)
-dispersals <- read_csv("data/Location Data/Metadata/From Teams/Formatted for R/dispersals_master_5-11-2023.csv")
+dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/dispersals_master_5-11-2023.csv")
 
 ############################### Import Covariate Data #################################
 
-cov_stack <- rast("data/homerange_habitat_layers_JR_9-14-22/cov_stack1_jr_4-28-2023.tif")
+cov_stack <- rast("data/Habitat_Covariates/puma_cov_stack_v1/cov_stack1.tif")
+
+#rename covariate bands
+names(cov_stack) <- c("tree_cover_hansen",
+                      "gpp",
+                      "infra_hii",
+                      "landuse_hii",
+                      "land_cover_usfs",
+                      "land_use_usfs",
+                      "npp",
+                      "popdens_hii",
+                      "power_hii",
+                      "precip",
+                      "rails_hii",
+                      "roads_hii",
+                      "elevation",
+                      "slope",
+                      "aspect",
+                      "tri",
+                      "tpi",
+                      "perc_tree_cover",
+                      "perc_nontree_veg",
+                      "perc_nonveg",
+                      "ndvi",
+                      "evi",
+                      "dist_water")
+
+#inspect covariate stack--plotting takes a long time. Parallel doesn't seem to be working
+# plan(multicore)
+# terra::plot(cov_stack, parallel = TRUE)
 
 ################################ Data Cleaning/Formatting #################################
 
+#Make sure R recognizes the local time column in the correct time zone
+tz(locs_raw$date_time_local) <- "US/Pacific"
 
 #Filter deploment list to get one row per individual
 first_deps <- deployments %>% 
@@ -67,22 +125,10 @@ dem_cats <- first_deps %>%
   rename(animal_id=name)
 
 
-#remove missing locations and convert GMT timestamp to local time
-locs <- locs_raw %>% 
-  mutate(date_time_utc = mdy_hms(date_time_utc, tz= "UTC", truncated = 3),
-         date_time_local = mdy_hms(date_time_local, tz= "US/Pacific", truncated = 3)) %>% 
-  filter(!is.na(latitude))
-
-#nest locations into list columns by animal_id
-locs_nested <- locs %>% nest_by(animal_id)
-
-
-#add columns for sex and dispersal status to nested locations 
-locs_nested <- locs_nested %>% 
-  left_join(dem_cats, by = join_by(animal_id)) 
-
-#reorder columns
-locs_nested <- locs_nested %>% 
+#Nest locations by animal_id and add columns for sex and dispersal status
+locs_nested <- locs_raw %>% 
+  nest_by(animal_id) %>% 
+  left_join(dem_cats, by = join_by(animal_id)) %>% 
   select(animal_id, sex, dispersal_status, data)
 
 
@@ -97,9 +143,10 @@ multi_track <- function(d){
 
 locs_nested$tracks <- map(locs_nested$data, multi_track)
 
+
+#subset only disperser locations
 dispersers <- locs_nested %>% 
   filter(dispersal_status=="disperser")
-
 
 
 ################################ Examine Sampling Rates #################################
@@ -140,12 +187,12 @@ indiv_to_remove <- locs_nested_test %>%
   pull(animal_id)
 
 
-#1 hour removes 66 individuals 
+#1 hour removes 67 individuals 
 #2 hour removes 31 individuals 
-#3 hours removes 28 individuals 
+#3 hours removes 29 individuals 
 #4 hours removes 32 individuals 
-#5 hours removes 61 individuals 
-#6 hours removes 9 individuals 
+#5 hours removes 64 individuals 
+#6 hours removes 10 individuals 
 
 #6 hours retains the most individuals
 
@@ -153,39 +200,151 @@ indiv_to_remove <- locs_nested_test %>%
 ################################ Resample Tracks/Generate Steps/Extract covariate values #################################
 
 #function to convert locatons to 6hr steps and extract covariate values
-steps_6h <- function(x) {
+steps_calc <- function(x) {
   x %>% 
-    amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
+    amt::track_resample(rate = hours(resample_int_hours), tolerance = minutes(tolerance_mins)) %>% #resample to 2 hours
     amt::filter_min_n_burst() %>% #divide into bursts of min 3 pts
     amt::steps_by_burst() %>%  #convert to steps
-    amt::random_steps(n_control = rand_steps) %>% #generate 10 random steps per used step
-    amt::extract_covariates(cov_stack, where = "both") %>% #extract covariates at start and end
+    amt::random_steps(n_control = rand_steps) %>% #generate random steps per used step
+    amt::extract_covariates(cov_stack, where = "end") %>% #extract covariates at start and end
     #amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
 }
 
 #remove cato and the other individuals not compatible with the 6 hour sampling interval
 amt_locs <- locs_nested %>% 
-  filter(!(animal_id %in% indiv_to_remove)) %>% 
-  filter(animal_id != "Cato")
+  filter(!(animal_id %in% indiv_to_remove)) 
+
+#%>% filter(animal_id != "Cato")
 
 #map the step function over each individual and append as a nested dataframe
-amt_locs$steps <- map(amt_locs$tracks, steps_6h)
+amt_locs$steps <- map(amt_locs$tracks, steps_calc)
 
 #select the relevant columns and unnest the steps column
 amt_steps <- amt_locs %>% 
   select(animal_id:dispersal_status,
          steps) %>% 
-  unnest(cols=c(steps))
+  unnest(cols=c(steps)) %>% 
+  relocate(unique_step, .after = step_id_) %>% 
+  ungroup()
 
+#Check global step length and turn angle distributions
 #don't seem to be moving more than 10 km in 6 hours
 amt_steps %>% 
-  filter(case_==TRUE) %>% 
-  filter(sl_<15000) %>% 
+  #filter(case_==TRUE) %>% 
+  filter(sl_ >100 & sl_<20000 ) %>% 
   pull(sl_) %>%
   hist()
 
 hist(amt_steps$ta_)
+
+
+#filter steps to remove outliers and stationary steps
+steps_unscaled <- amt_steps %>% 
+  filter(sl_ >100 & sl_<20000 ) %>% 
+  terra::na.omit()
+
+
+#make sure no data are missing after omitting steps with missing raster values
+#plot_missing(steps_unscaled)
+
+
+################################ Covaraite Transformations #################################
+
+### Aspect #####
+
+#convert aspect from degrees to radians and calculate northing and easting variables with cos and sin transformations respectively
+steps_unscaled <- steps_unscaled %>% 
+  mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
+  mutate(northing = cos(aspect_rad),
+         easting = sin(aspect_rad), .after=aspect_rad) %>% 
+  rename(aspect_deg = aspect)
+  
+
+### USFS Land Cover #####
+
+#round mean values for landuse and landcover to nearest integer
+steps_unscaled <- steps_unscaled %>% 
+  mutate(land_cover_usfs = round(land_cover_usfs),
+         land_use_usfs = round(land_use_usfs))
+
+#define land cover categories
+steps_unscaled <- steps_unscaled %>% 
+  mutate(land_cover_usfs = case_when(land_cover_usfs == 1 ~ "trees",
+                                     land_cover_usfs == 2 ~ "tall_trees_shrubs",
+                                     land_cover_usfs == 3 ~ "tree_shrub_mix",
+                                     land_cover_usfs == 4 ~ "gfh_tree_mix",
+                                     land_cover_usfs == 5 ~ "barren_tree_mix",
+                                     land_cover_usfs == 6 ~ "tall_shrubs",
+                                     land_cover_usfs == 7 ~ "shrubs",
+                                     land_cover_usfs == 8 ~ "gfh_shrub_mix",
+                                     land_cover_usfs == 9 ~ "barren_shrub_mix",
+                                     land_cover_usfs == 10 ~ "gfh",
+                                     land_cover_usfs == 11 ~ "barren_gfh_mix",
+                                     land_cover_usfs == 12 ~ "barren_impervious",
+                                     land_cover_usfs == 13 ~ "snow_ice",
+                                     land_cover_usfs == 14 ~ "water",
+                                     land_cover_usfs == 15 ~ NA_character_))
+
+
+### USFS Land Use #####
+
+#define land use categories
+steps_unscaled <- steps_unscaled %>% 
+  mutate(land_use_usfs = case_when(land_use_usfs == 1 ~ "agriculture",
+                                   land_use_usfs == 2 ~ "developed",
+                                   land_use_usfs == 3 ~ "forest"))
+
+
+################################ Add Season Covariates #################################
+
+#hunting season (deer and elk): Sep 15 - Nov 15 (WDFW)
+#calving season (deer and elk): May 15 - July 1 (WDFW)
+#wet season: October - April (en.climate data.org)
+#dry season: May - September (en.climate data.org)
+
+steps_unscaled <- steps_unscaled %>% 
+  mutate(season = case_when(month(t2_) >= 10 | month(t2_) <= 4 ~ "wet",
+                            month(t2_) < 10 & month(t2_) > 4 ~ "dry"),
+         hunting_season = ifelse(yday(t2_) %in% c(258:319), "yes", "no"),
+         calving_season = ifelse(yday(t2_) %in% c(135:182), "yes", "no"))
+
+
+# check to make sure categorization worked correctly
+# filter(year(t2_)== 2020) %>% 
+#   group_by(season) %>% summarize(first = min(t2_), last = max(t2_))
+
+
+
+#add unique id and rearrange fields to final format
+steps_final <- steps_unscaled %>% 
+  mutate(unique_id = 1:nrow(steps_unscaled), .before= animal_id) %>% 
+  select(unique_id:burst_,
+         step_id_,
+         unique_step,
+         case_,
+         x1_:dt_,
+         gpp,
+         npp,
+         ndvi,
+         evi,
+         tree_cover_hansen,
+         perc_tree_cover:perc_nonveg,
+         land_cover_usfs,
+         precip,
+         dist_water,
+         elevation:tpi,
+         land_use_usfs,
+         roads_hii,
+         popdens_hii,
+         landuse_hii,
+         infra_hii,
+         rails_hii,
+         power_hii,
+         season:calving_season
+         ) %>% 
+  mutate(across(roads_hii:power_hii, round))
+
 
 #scale covariates (optional)
 # amt_steps_scaled <- amt_steps %>%
@@ -193,7 +352,7 @@ hist(amt_steps$ta_)
 #   mutate(across(elev_start:landuse_hii_end, as.numeric))
 
 
-#write_csv(amt_steps, "6h_steps_unscaled_cov_5-09-2023.csv")
+#write_csv(steps_final, "data/Location_Data/Steps/6h_steps_unscaled_6-02-2023.csv")
 
 
 
