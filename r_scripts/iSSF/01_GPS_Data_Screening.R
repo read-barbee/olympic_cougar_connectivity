@@ -15,7 +15,6 @@
 # •	Check for missing data
 # •	Remove first 24hr of fixes for each animal to avoid capture effects
 # •	Remove 2D fixes with dop score > 5
-# •	Calculate global fix rate 
 # •	Remove locations outside extent of study area raster 
 
 

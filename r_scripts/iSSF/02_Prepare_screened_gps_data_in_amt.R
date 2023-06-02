@@ -24,13 +24,14 @@
 # •	Remove individuals not compatible with that resampling interval
 # •	Resample tracks, generate used and random steps, and extract covariate values for end of each step
 # •	Filter steps to remove outliers and stationary steps (100 m < sl_ < 20,000 m )
+# •	Remove individuals with < 30steps and/or < 30 days of steps????***
 # •	Transform aspect to continuous easting and northing values
 # •	Define USFS landcover and landuse categories
 # •	Derive covariates for climatic season, hunting season, and calving season
 # •	Round all floating hii values to integers
 # •	reorder columns and export to csv
 
-
+#
 
 ################################ Libraries #################################
 library(tidyverse)
@@ -211,11 +212,10 @@ steps_calc <- function(x) {
     mutate(unique_step = paste(burst_,step_id_,sep="_")) #add column for unique step id 
 }
 
-#remove cato and the other individuals not compatible with the 6 hour sampling interval
+#remove individuals not compatible with the 6 hour sampling interval
 amt_locs <- locs_nested %>% 
   filter(!(animal_id %in% indiv_to_remove)) 
 
-#%>% filter(animal_id != "Cato")
 
 #map the step function over each individual and append as a nested dataframe
 amt_locs$steps <- map(amt_locs$tracks, steps_calc)
@@ -228,6 +228,8 @@ amt_steps <- amt_locs %>%
   relocate(unique_step, .after = step_id_) %>% 
   ungroup()
 
+################################ Secondary Screening #################################
+
 #Check global step length and turn angle distributions
 #don't seem to be moving more than 10 km in 6 hours
 amt_steps %>% 
@@ -237,6 +239,21 @@ amt_steps %>%
   hist()
 
 hist(amt_steps$ta_)
+
+#Remove individuals with < 30steps and/or < 30 days of steps: removes 4 individuals. not sure yet if this is necessary
+
+# removal_list <- amt_steps %>%
+#   group_by(animal_id) %>%
+#   mutate(date_range=interval(start=min(t1_), end=max(t2_)),
+#          step_days = as.duration(date_range)/ddays(1)) %>% 
+#   distinct(unique_step, .keep_all = TRUE) %>% 
+#   summarize(n=n(), step_days = round(first(step_days), 0)) %>%
+#   filter(n<30 & step_days <= 30) %>% 
+# pull(animal_id)
+# 
+# amt_steps <- amt_steps %>% 
+#   filter(!(animal_id %in% removal_list))
+
 
 
 #filter steps to remove outliers and stationary steps
@@ -293,7 +310,11 @@ steps_unscaled <- steps_unscaled %>%
 steps_unscaled <- steps_unscaled %>% 
   mutate(land_use_usfs = case_when(land_use_usfs == 1 ~ "agriculture",
                                    land_use_usfs == 2 ~ "developed",
-                                   land_use_usfs == 3 ~ "forest"))
+                                   land_use_usfs == 3 ~ "forest",
+                                   land_use_usfs == 4 ~ "non_forest_wetland",
+                                   land_use_usfs == 5 ~ "other",
+                                   land_use_usfs == 6 ~ "rangeland_pasture",
+                                   land_use_usfs == 7 ~ NA_character_))
 
 
 ################################ Add Season Covariates #################################
