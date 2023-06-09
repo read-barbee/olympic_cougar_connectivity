@@ -176,9 +176,7 @@ check_model(elev_uni_fit)
 ################################ Univariate SSF Models #################################
 
 covs2 <- steps %>% 
-  select(case_, step_id_, gpp:calving_season) %>% 
-  select(-c(aspect_deg, aspect_rad))
-
+  select(case_, step_id_, gpp:calving_season)
 #function to fit a univariate issf model for each covariate
 uni_fit_issf <- function(cov){
   uni_mod <- fit_issf(data=covs2, case_ ~ cov + strata(step_id_))
@@ -220,9 +218,9 @@ dredge_full <- dredge(full_mod, rank=BIC)
 
 #not currently working. Dataset too large. works for around 10,000 points
 covs2 <- steps %>% 
-  select(case_, animal_id, gpp:calving_season) %>% 
-  mutate(case_=as.factor(case_)) %>% 
-  #mutate(across(c(gpp:calving_season), dummify)) need to figure out how to dummify categorical variables without dummifying case_
+  select(animal_id, gpp:calving_season) %>% 
+  dummify() %>% 
+  mutate(case_=as.factor(covs$case_))
 
 data_set_size <- floor(nrow(covs2)*0.80)
 index <- sample(1:nrow(covs2), size = 5000)
@@ -251,11 +249,13 @@ library(xgboost)
 library(cvms)
 library(caTools)
 
+covs3 <- covs2 %>% select(-animal_id)
+
 set.seed(42)
 
-sample_split <- sample.split(Y = covs2$case_, SplitRatio = 0.7)
-train_set <- subset(x = covs2, sample_split == TRUE)
-test_set <- subset(x = covs2, sample_split == FALSE)
+sample_split <- sample.split(Y = covs3$case_, SplitRatio = 0.7)
+train_set <- subset(x = covs3, sample_split == TRUE)
+test_set <- subset(x = covs3, sample_split == FALSE)
 
 y_train <- as.integer(train_set$case_) - 1
 y_test <- as.integer(test_set$case_) - 1
@@ -280,11 +280,15 @@ xgb_params <- list(
 xgb_model <- xgb.train(
   params = xgb_params,
   data = xgb_train,
-  nrounds = 5000,
+  nrounds = 10, #5000
   verbose = 1
 )
 xgb_model
 
+#variable importance scores
+xgb_importance <- xgb.importance(model = xgb_model)
+
+xgb.ggplot.importance(xgb_importance)
 
 
 
