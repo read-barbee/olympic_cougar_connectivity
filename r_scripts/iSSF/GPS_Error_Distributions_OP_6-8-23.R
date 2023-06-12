@@ -24,6 +24,7 @@ library(sgt)
 #levy dist: mu = 4.5, c = 2.1 
 
 
+
 ################################ Parameters from Sager 2007 #################################
 #1,075 GPS locations acquired
 #561 3D
@@ -69,8 +70,10 @@ dist_crs <- 5070 #Albers Equal Area Projection (meters)
 seed <- 777
 
 
+t_est <- function(){
+
 ################################ Step 1: Simulate 3D fixes #################################
-set.seed(seed)
+# set.seed(seed)
 
 #generate reference point (true location)
 ref_point <- st_point(c(x = ref_lon , y = ref_lat)) #x = 47.801262, y = -123.717987 
@@ -88,8 +91,8 @@ dist_3D <- dist_3D %>%
   rename(distance = value)
 
 #check distribution
-dist_3D %>% pull(distance) %>% summary()
-dist_3D %>% pull(distance) %>% hist()
+# dist_3D %>% pull(distance) %>% summary()
+# dist_3D %>% pull(distance) %>% hist()
 
 
 #Sample bearings from custom Von Mises distribution (3D fixes)  
@@ -100,8 +103,8 @@ dir_3D <- Rfast::rvonmises(n = n_3D, m = m_vm_3D, k = k_vm_3D, rads = TRUE) %>%
   mutate(bearing = (bearing*180)/pi) #convert radians back to degrees for distance function
   
 
-dir_3D %>% pull(bearing) %>% summary()
-dir_3D %>% pull(bearing) %>% hist()
+# dir_3D %>% pull(bearing) %>% summary()
+# dir_3D %>% pull(bearing) %>% hist()
 
 
 #Bind distance and bearing vectors to make matrix for distance simulation 
@@ -135,26 +138,26 @@ sim_pts_3D_scaled_sf <- sim_pts_3D_scaled %>%  st_as_sf(coords = c("X", "Y"), cr
 radius <- quantile(sqrt(sim_pts_3D_scaled$X^2 + sim_pts_3D_scaled$Y^2), 0.95)
 
 #plot simulated data with circle around 95% of data
-sim_plot_3D <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  geom_sf(data =sim_pts_3D_scaled_sf, aes(geometry=geometry)) +
-  geom_sf(data=ref_point_utm, aes(geometry=geometry, col="red")) +
-  ggforce::geom_circle(aes(x0 = 0, y0 = 0, r = radius), color = "red", fill = NA) +
-  coord_sf(datum=st_crs(dist_crs)) +
-  labs(x = "Error easting (m)", y="Error northing (m)", title = paste0("Simulated Error of 3D GPS Locations n = ",n_3D)) +
-  theme(legend.position = "none") +
-  xlim(-100, 100) +
-  ylim (-100, 100)
+# sim_plot_3D <- ggplot() +
+#   geom_hline(yintercept = 0) +
+#   geom_vline(xintercept = 0) +
+#   geom_sf(data =sim_pts_3D_scaled_sf, aes(geometry=geometry)) +
+#   geom_sf(data=ref_point_utm, aes(geometry=geometry, col="red")) +
+#   ggforce::geom_circle(aes(x0 = 0, y0 = 0, r = radius), color = "red", fill = NA) +
+#   coord_sf(datum=st_crs(dist_crs)) +
+#   labs(x = "Error easting (m)", y="Error northing (m)", title = paste0("Simulated Error of 3D GPS Locations n = ",n_3D)) +
+#   theme(legend.position = "none") +
+#   xlim(-100, 100) +
+#   ylim (-100, 100)
 
 
 
 ################################ Step 2: Fit t-distribution to simulated 3D fixes to estimate parameters for the state-space model #################################
 
 #doesn't seem to fit any common distributions
-descdist(sim_pts_3D$lon, discrete = FALSE)
-hist(sim_pts_3D$lon, freq = FALSE)
-lines(density(sim_pts_3D$lon), add= TRUE)
+# descdist(sim_pts_3D$lon, discrete = FALSE)
+# hist(sim_pts_3D$lon, freq = FALSE)
+# lines(density(sim_pts_3D$lon), add= TRUE)
 
 #sim_pts_3D_utm <- sim_pts_3D_sf %>% st_coordinates %>% as_tibble()
 
@@ -164,11 +167,12 @@ lines(density(sim_pts_3D$lon), add= TRUE)
 t_fit_lon_3D <- fitdist(sim_pts_3D$lon, "lst",
                         method = "mle",
                         start = list(sigma = 1, 
-                                     df = 5), 
+                                     df = 3), 
                         fix.arg = list(mu = ref_lon),
-                        lower=c(0.000047, 2)) #0.00005
+                        lower=c(0.000097, 1)) #0.00005
 
-gofstat(t_fit_lon_3D)
+# plot(t_fit_lon_3D)
+# gofstat(t_fit_lon_3D)
 
 
 # #without fixed mean (performs worse)
@@ -197,9 +201,13 @@ t_fit_lat_3D <-  fitdist(sim_pts_3D$lat, "lst",
                          lower=c(0.000042, 0)) #0.00005
 
 
+# plot(t_fit_lat_3D)
+# gofstat(t_fit_lat_3D)
+
+
 #likelihood surface plot
-llsurface(sim_pts_3D$lon, distr ="lst", plot.arg = c("df", "sigma"), fix.arg = list(mu = ref_lon), min.arg = c(0, 0), max.arg = c(2, 2))
-points(t_fit_lon_3D$estimate[2], t_fit_lon_3D$estimate[1], pch="x", col="red")
+# llsurface(sim_pts_3D$lon, distr ="lst", plot.arg = c("df", "sigma"), fix.arg = list(mu = ref_lon), min.arg = c(0, 0), max.arg = c(2, 2))
+# points(t_fit_lon_3D$estimate[2], t_fit_lon_3D$estimate[1], pch="x", col="red")
 
 
 
@@ -216,8 +224,8 @@ dist_2D <- dist_2D %>%
   rename(distance = value)
 
 #check distribution
-dist_2D %>% pull(distance) %>% summary()
-dist_2D %>% pull(distance) %>% hist()
+# dist_2D %>% pull(distance) %>% summary()
+# dist_2D %>% pull(distance) %>% hist()
 
 
 #Sample bearings from custom Von Mises distribution (3D fixes)  
@@ -228,8 +236,8 @@ dir_2D <- Rfast::rvonmises(n = n_2D, m = m_vm_2D, k = k_vm_2D, rads = TRUE) %>%
   mutate(bearing = (bearing*180)/pi) #convert radians back to degrees for distance function
 
 
-dir_2D %>% pull(bearing) %>% summary()
-dir_2D %>% pull(bearing) %>% hist()
+# dir_2D %>% pull(bearing) %>% summary()
+# dir_2D %>% pull(bearing) %>% hist()
 
 
 #Bind distance and bearing vectors to make matrix for distance simulation 
@@ -260,22 +268,86 @@ sim_pts_2D_scaled_sf <- sim_pts_2D_scaled %>%  st_as_sf(coords = c("X", "Y"), cr
 radius <- quantile(sqrt(sim_pts_2D_scaled$X^2 + sim_pts_2D_scaled$Y^2), 0.95)
 
 #plot simulated data with circle around 95% of data
-sim_plot_2D <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  geom_sf(data =sim_pts_2D_scaled_sf, aes(geometry=geometry)) +
-  geom_sf(data=ref_point_utm, aes(geometry=geometry, col="red")) +
-  ggforce::geom_circle(aes(x0 = 0, y0 = 0, r = radius), color = "red", fill = NA) +
-  coord_sf(datum=st_crs(dist_crs)) +
-  labs(x = "Error easting (m)", y="Error northing (m)", title = paste0("Simulated Error of 2D GPS Locations n = ",n_2D)) +
-  theme(legend.position = "none") +
-  xlim(-1000, 1000) +
-  ylim(-1000, 1000)
+# sim_plot_2D <- ggplot() +
+#   geom_hline(yintercept = 0) +
+#   geom_vline(xintercept = 0) +
+#   geom_sf(data =sim_pts_2D_scaled_sf, aes(geometry=geometry)) +
+#   geom_sf(data=ref_point_utm, aes(geometry=geometry, col="red")) +
+#   ggforce::geom_circle(aes(x0 = 0, y0 = 0, r = radius), color = "red", fill = NA) +
+#   coord_sf(datum=st_crs(dist_crs)) +
+#   labs(x = "Error easting (m)", y="Error northing (m)", title = paste0("Simulated Error of 2D GPS Locations n = ",n_2D)) +
+#   theme(legend.position = "none") +
+#   xlim(-1000, 1000) +
+#   ylim(-1000, 1000)
 
 
 
 
 ################################ Step 4: Fit t-distribution to simulated 2D fixes to estimate parameters for the state-space model #################################
+#fit to longitude with mean fixed to true location
+t_fit_lon_2D <- fitdist(sim_pts_2D$lon, "lst",
+                        method = "mle",
+                        start = list(sigma = 1, 
+                                     df = 3), 
+                        fix.arg = list(mu = ref_lon),
+                        lower=c(0.00027, 0)) #0.00005
+
+# plot(t_fit_lon_2D)
+# gofstat(t_fit_lon_2D)
+
+
+
+### Repeat for Longitude ###
+t_fit_lat_2D <-  fitdist(sim_pts_2D$lat, "lst", 
+                         start = list(sigma = 1, 
+                                      df = 1), 
+                         fix.arg = list(mu = ref_lat),
+                         lower=c(0.000205, 0)) #0.00005
+
+
+# plot(t_fit_lat_2D)
+# gofstat(t_fit_lat_2D)
+
+
+#likelihood surface plot
+# llsurface(sim_pts_3D$lon, distr ="lst", plot.arg = c("df", "sigma"), fix.arg = list(mu = ref_lon), min.arg = c(0, 0), max.arg = c(2, 2))
+# points(t_fit_lon_3D$estimate[2], t_fit_lon_3D$estimate[1], pch="x", col="red")
+
+return(tibble(tau_lon_3D = t_fit_lon_3D$estimate[1],
+              nu_lon_3D = t_fit_lon_3D$estimate[2],
+              tau_lat_3D = t_fit_lat_3D$estimate[1],
+              nu_lat_3D = t_fit_lat_3D$estimate[2],
+              tau_lon_2D = t_fit_lon_2D$estimate[1],
+              nu_lon_2D = t_fit_lon_2D$estimate[2],
+              tau_lat_2D = t_fit_lat_2D$estimate[1],
+              nu_lat_2D = t_fit_lat_2D$estimate[2]
+              ))
+
+}
+
+### conduct many simulations and average parameter estimates
+
+t_est_dat <- tibble(tau_lon_3D = NA,
+                    nu_lon_3D = NA,
+                    tau_lat_3D = NA,
+                    nu_lat_3D =NA,
+                    tau_lon_2D = NA,
+                    nu_lon_2D = NA,
+                    tau_lat_2D = NA,
+                    nu_lat_2D = NA)
+
+#for loop to simulate estimates
+for (i in 1:nsim){
+  #t_est_dat[i-1,] = t_est()[1,]
+  t_est_dat[i,] = t_est()[1,]
+  
+}
+
+#calculate mean and median parameter estimates across all simulations
+means <- t_est_dat %>%
+  summarize(across(everything(), mean, .names = "mean_{.col}"))
+medians <- t_est_dat %>%
+  summarize(across(everything(), median, .names = "median_{.col}"))
 
 ###############################################################################  
 
