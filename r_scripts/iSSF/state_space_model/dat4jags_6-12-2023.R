@@ -34,6 +34,11 @@ example_data <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/Reference
 data <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Location_Data/Source_Files/locations_master/gps_locs_master_5-16-2023.csv", col_types = list(fix_type = col_character())) %>% 
   filter(animal_id == "Al")
 
+#1853 observations
+#1526 NAs
+
+#3379 total lines
+
 #separate date and time columns and select for relevant columns
 data <- data %>% 
   mutate(date_time_local = force_tz(date_time_local, tz = "US/Pacific"),
@@ -42,7 +47,7 @@ data <- data %>%
   dplyr::select(date, time, fix_type, latitude, longitude, date_time_local, deployment_id)
 
 #convert time column to minutes after midnight
-data <- data %>% mutate(time_mam = as.numeric(hour(time) * 60 + minute(time) + second(time) / 60))
+data <- data %>% mutate(time_mam = as.numeric(hour(time) * 60 + minute(time) + second(time) / 60)) %>% filter(!is.na(latitude))
 
 newdata <- data
 
@@ -52,28 +57,28 @@ lat <- newdata$latitude
 date <- newdata$date
 date_time <- newdata$date_time_local
 
+interval_hours <- 2
 
-timestep = hours(2)
+timestep = hours(interval_hours)
 
 
 
 # group observations into 'windows' of duration = timestep and create index (idx) for WinBUGS
-# start_time <- round_date(first(date_time), unit = "hour")
-# end_time <- round_date(last(date_time), unit = "hour")
-# time_interval <- end_time - start_time
-# n_intervals <- ceiling(as.period(time_interval) / timestep)
-# steps <- seq(from = start_time, to =(start_time + n_intervals * timestep), by = "2 hours")
-# row.out <- sapply(2:n_intervals, function(i){row.names(newdata)[date_time < steps[i] & date_time >= steps[i-1] & is.na(newdata$latitude)==FALSE]}) #assigns observed locations to regular intervals
-# tmp <- sapply(1:length(row.out), function(i){if(length(row.out[[i]]) == 0) row.out[[i]] <- NA else row.out[[i]]})# set regular intervals with no observations to NA, else use what's already there (the observation)
-# idx <- cumsum(c(1, sapply(tmp, length))) #cumulative sum of number of observations in each regular interval
-# newdata <- newdata[unlist(tmp), ] #adding rows for regular intervals (days) with missing observations
-# newdata <- data.frame(newdata, row.names = NULL)
+start_time <- round_date(min(date_time), unit = "hour")
+end_time <- round_date(max(date_time), unit = "hour")
+time_interval <- end_time - start_time
+n_intervals <- ceiling(as.period(time_interval) / timestep)
+steps <- seq(from = start_time, to =(start_time + n_intervals * timestep), by = "2 hours")
+row.out <- sapply(2:n_intervals, function(i){row.names(newdata)[date_time < steps[i] & date_time >= steps[i-1] & is.na(newdata$latitude)==FALSE]}) #assigns observed locations to regular intervals
+tmp <- lapply(1:length(row.out), function(i){if(length(row.out[[i]]) == 0) row.out[[i]] <- NA else row.out[[i]]})# set regular intervals with no observations to NA, else use what's already there (the observation)
+idx <- cumsum(c(1, sapply(tmp, length))) #cumulative sum of number of observations in each regular interval
+newdata <- newdata[unlist(tmp), ] #adding rows for regular intervals (days) with missing observations
+newdata <- data.frame(newdata, row.names = NULL)
 
-data <- data %>% mutate(unique_id = 1:nrow(data), .before = date)
+#data <- data %>% mutate(unique_id = 1:nrow(data), .before = date)
 
-idx <- data$unique_id
+#idx <- data$unique_id
 
-data[1,]
 
 # j isn't actually necessary because there's already a data point for every time step even if there's no actual fix. 
 
@@ -84,7 +89,12 @@ for(i in 1:(length(idx) - 1)){
 	d <- as.numeric(newdata$date[idx[i]:(idx[i+1]-1)] - newdata$date[idx[i]])
 	j1 <- (t + d * 1440) / (timestep * 1440)
 	j <- c(j, j1)
-	}
+}
+
+# t <- newdata$time_mam[idx[3]:(idx[3+1]-1)]
+# d <- as.numeric(newdata$date[idx[1]:(idx[1+1]-1)] - newdata$date[idx[1]])
+# j1 <- (t + interval_hours * 60) / (interval_hours * 60)
+# j <- c(j, j1)
 
 # set up t-distribution parameters and create look-up values for the different location classess
 sigma.lon <- c()
@@ -121,7 +131,7 @@ nu.lat[2] <- 2.397886 #2D
 
 # convert standard errors to precisions (se^-2); required for WinBUGS
 
-data <- data %>% mutate(itau2.lon = case_when(fix_type =="3D" ~ sigma.lon[1]^-2,
+newdata <- newdata %>% mutate(itau2.lon = case_when(fix_type =="3D" ~ sigma.lon[1]^-2,
                                       fix_type =="2D"~ sigma.lon[2]^-2,
                                       is.na(fix_type) ~ max(sigma.lon[2]^-2)),
                 itau2.lat = case_when(fix_type =="3D" ~ sigma.lat[1]^-2,
@@ -143,12 +153,19 @@ data <- data %>% mutate(itau2.lon = case_when(fix_type =="3D" ~ sigma.lon[1]^-2,
 # set missing observations to be at mid-day
 #j[is.na(j)] <- 0.5
 
-return(list(y = cbind(data$longitude, data$latitude),
-            itau2 = cbind(data$itau2.lon, data$itau2.lat),
-            nu = cbind(data$nu.lon, data$nu.lat),
-            idx = data$unique_id,
-            j = rep(1, length(idx)), 
-            RegN = nrow(data)-1))
+return(list(y = cbind(newdata$longitude, newdata$latitude),
+            itau2 = cbind(newdata$itau2.lon, newdata$itau2.lat),
+            nu = cbind(newdata$nu.lon, newdata$nu.lat),
+            idx = idx,
+            j = rep(0, nrow(newdata)), 
+            RegN = nrow(newdata)-1))
+
+test_dat <- list(y = cbind(newdata$longitude, newdata$latitude),
+                 itau2 = cbind(newdata$itau2.lon, newdata$itau2.lat),
+                 nu = cbind(newdata$nu.lon, newdata$nu.lat),
+                 idx = idx,
+                 j = rep(0, nrow(newdata)), 
+                 RegN = nrow(newdata)-1)
 
 
 #original form

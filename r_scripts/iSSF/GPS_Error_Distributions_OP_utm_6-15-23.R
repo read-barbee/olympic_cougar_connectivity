@@ -69,7 +69,7 @@ dist_crs <- 5070 #Albers Equal Area Projection (meters)
 
 n_sim <- 500
 
-seed <- 777
+#seed <- 777
 
 
 #function to simulate error data and estimate fitted t-distribution parameters
@@ -80,8 +80,7 @@ t_est <- function(){
 # set.seed(seed)
 
 #generate reference point (true location)
-ref_point <- st_point(c(x = ref_lon , y = ref_lat)) #x = 47.801262, y = -123.717987 
-
+ref_point <- st_point(c(x = ref_lon , y = ref_lat)) #y = 47.801262, x = -123.717987 
 
 ######## Sample distances from custom Weibull distribution (3D fixes)  ####################
 
@@ -158,50 +157,38 @@ radius <- quantile(sqrt(sim_pts_3D_scaled$X^2 + sim_pts_3D_scaled$Y^2), 0.95)
 
 ################################ Step 2: Fit t-distribution to simulated 3D fixes to estimate parameters for the state-space model #################################
 
-#doesn't seem to fit any common distributions
-# descdist(sim_pts_3D$lon, discrete = FALSE)
-# hist(sim_pts_3D$lon, freq = FALSE)
-# lines(density(sim_pts_3D$lon), add= TRUE)
+#convert simulated points from lat/long to meters 
+sim_pts_3D_sf <- sim_pts_3D %>% 
+  st_as_sf(coords = c("lon", "lat"), crs=4326) %>% 
+  st_transform(crs = 5070)
 
-#sim_pts_3D_utm <- sim_pts_3D_sf %>% st_coordinates %>% as_tibble()
+sim_pts_3D_utm <- sim_pts_3D %>% 
+  rename(lat_wgs84 = lat,
+         lon_wgs84 = lon) %>% 
+  mutate(lat_utm = st_coordinates(sim_pts_3D_sf)[,2],
+         lon_utm = st_coordinates(sim_pts_3D_sf)[,1], .after=lat_wgs84)
 
-#ref_pt_utm2 <- tibble(X = -123.717987, Y = 47.801262) %>% st_as_sf(coords = c("X", "Y"), crs=4326) %>% st_transform(crs=5070)
+ref_point_utm <- st_as_sf(tibble(X = "-123.717987", Y ="47.801262"),coords = c("X","Y"), crs = 4326) %>% st_transform(crs = 5070) %>% st_coordinates() %>% as_tibble() %>% rename(lon = X, lat = Y)
+
+
 
 #with mean fixed to true location
-t_fit_lon_3D <- fitdist(sim_pts_3D$lon, "lst",
+t_fit_lon_3D <- fitdist(sim_pts_3D_utm$lon_utm, "lst",
                         method = "mle",
                         start = list(sigma = 1, 
                                      df = 3), 
-                        fix.arg = list(mu = ref_lon),
+                        fix.arg = list(mu = ref_point_utm$lon),
                         lower=c(0.000097, 1)) #0.00005
 
 # plot(t_fit_lon_3D)
 # gofstat(t_fit_lon_3D)
 
 
-# #without fixed mean (performs worse)
-# t_fit_lon_3D <- fitdist(sim_pts_3D$lon, "lst",
-#                         start = list(mu = mean(sim_pts_3D$lon),
-#                                      sigma = sd(sim_pts_3D$lon),
-#                                      df = 1),
-#                         lower=c(-125, 0.00007, 0))
-
-
-#try skewed generalized t: fails
-# t_fit_lon_3D <- fitdist(sim_pts_3D$lon, "sgt", 
-#                         start = list(sigma = sd(sim_pts_3D$lon),
-#                                      lambda = -0.5,
-#                                      p = 0.5,
-#                                      q = 0.5),
-#                         fix.arg = list(mu =-123.717987),
-#                         lower=c(0, -1, 0, 0))
-
-
 ### Repeat for Longitude ###
-t_fit_lat_3D <-  fitdist(sim_pts_3D$lat, "lst", 
+t_fit_lat_3D <-  fitdist(sim_pts_3D_utm$lat_utm, "lst", 
                          start = list(sigma = 1, 
                                       df = 1), 
-                         fix.arg = list(mu = ref_lat),
+                         fix.arg = list(mu = ref_point_utm$lat),
                          lower=c(0.000042, 0)) #0.00005
 
 
@@ -288,12 +275,26 @@ radius <- quantile(sqrt(sim_pts_2D_scaled$X^2 + sim_pts_2D_scaled$Y^2), 0.95)
 
 
 ################################ Step 4: Fit t-distribution to simulated 2D fixes to estimate parameters for the state-space model #################################
+
+#convert simulated points from lat/long to meters 
+sim_pts_2D_sf <- sim_pts_2D %>% 
+  st_as_sf(coords = c("lon", "lat"), crs=4326) %>% 
+  st_transform(crs = 5070)
+
+sim_pts_2D_utm <- sim_pts_2D %>% 
+  rename(lat_wgs84 = lat,
+         lon_wgs84 = lon) %>% 
+  mutate(lat_utm = st_coordinates(sim_pts_2D_sf)[,2],
+         lon_utm = st_coordinates(sim_pts_2D_sf)[,1], .after=lat_wgs84)
+
+
+
 #fit to longitude with mean fixed to true location
-t_fit_lon_2D <- fitdist(sim_pts_2D$lon, "lst",
+t_fit_lon_2D <- fitdist(sim_pts_2D_utm$lon_utm, "lst",
                         method = "mle",
                         start = list(sigma = 1, 
                                      df = 3), 
-                        fix.arg = list(mu = ref_lon),
+                        fix.arg = list(mu = ref_point_utm$lon),
                         lower=c(0.00027, 0)) #0.00005
 
 # plot(t_fit_lon_2D)
@@ -302,15 +303,17 @@ t_fit_lon_2D <- fitdist(sim_pts_2D$lon, "lst",
 
 
 ### Repeat for Longitude ###
-t_fit_lat_2D <-  fitdist(sim_pts_2D$lat, "lst", 
+t_fit_lat_2D <-  fitdist(sim_pts_2D_utm$lat_utm, "lst", 
                          start = list(sigma = 1, 
                                       df = 1), 
-                         fix.arg = list(mu = ref_lat),
+                         fix.arg = list(mu = ref_point_utm$lat),
                          lower=c(0.000205, 0)) #0.00005
 
 
 # plot(t_fit_lat_2D)
 # gofstat(t_fit_lat_2D)
+
+sim_all_utm <- bind_rows(sim_pts_3D_utm, sim_pts_2D_utm)
 
 
 #likelihood surface plot
@@ -324,7 +327,11 @@ return(tibble(tau_lon_3D = t_fit_lon_3D$estimate[1],
               tau_lon_2D = t_fit_lon_2D$estimate[1],
               nu_lon_2D = t_fit_lon_2D$estimate[2],
               tau_lat_2D = t_fit_lat_2D$estimate[1],
-              nu_lat_2D = t_fit_lat_2D$estimate[2]
+              nu_lat_2D = t_fit_lat_2D$estimate[2],
+              sd_lon_3D = sd(sim_pts_3D_utm$lon_utm),
+              sd_lat_3D = sd(sim_pts_3D_utm$lat_utm),
+              sd_lon_2D = sd(sim_pts_2D_utm$lon_utm),
+              sd_lat_2D = sd(sim_pts_2D_utm$lat_utm),
               ))
 
 }
@@ -338,10 +345,14 @@ t_est_dat <- tibble(tau_lon_3D = NA,
                     tau_lon_2D = NA,
                     nu_lon_2D = NA,
                     tau_lat_2D = NA,
-                    nu_lat_2D = NA)
+                    nu_lat_2D = NA,
+                    sd_lon_3D = NA,
+                    sd_lat_3D = NA,
+                    sd_lon_2D = NA,
+                    sd_lat_2D = NA)
 
 #for loop to simulate estimates
-for (i in 1:nsim){
+for (i in 1:n_sim){
   #t_est_dat[i-1,] = t_est()[1,]
   t_est_dat[i,] = t_est()[1,]
   
