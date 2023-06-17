@@ -17,6 +17,10 @@
 # •	Import amt step data
 
 
+#Top Variables Across Models:
+#NDVI
+#Popdens_hii
+#tree_cover_hansen
 
 
 ################################ Libraries #################################
@@ -66,7 +70,13 @@ plot_bar(steps %>% select(sex, gpp:calving_season), by="sex")
 #full report with all DataExplorer metrics
 #create_report(steps, y="case_")
 
+steps <- steps %>% mutate(land_cover_usfs_lumped = fct_collapse(land_cover_usfs, trees = c("trees", "tall_trees_shrubs", "gfh_tree_mix", "tree_shrub_mix",  "barren_tree_mix"),
+                                                       shrubs = c("tall_shrubs", "shrubs", "gfh_shrub_mix", "barren_shrub_mix"),
+                                                       gfh = c("gfh", "barren_gfh_mix"),
+                                                       barren = c("barren_impervious", "snow_ice")),
+                                 land_use_usfs_lumped = fct_collapse(land_use_usfs, agriculture = c("agriculture", "rangeland_pasture")), .after = land_cover_usfs)
 
+plot_bar(steps_lumped %>% select(gpp:calving_season))
 ################################ Scale continuous covariates #################################
 
 steps_scaled <- steps %>% 
@@ -102,8 +112,8 @@ ggcorr(steps_scaled %>%
          select(case_, sl_, ta_, gpp:calving_season), label = TRUE)
 
 #VERY slow
-ggpairs(steps_scaled %>% 
-         select(case_, gpp:elevation), label = TRUE)
+#ggpairs(steps_scaled %>% 
+         #select(case_, gpp:elevation), label = TRUE)
 
 
 
@@ -133,6 +143,8 @@ plot_prcomp(steps_scaled %>% select(gpp:calving_season), nrow=1, ncol=2, paralle
 #PC1: Slope, elevation, tri, and some veg
 #PC2: Veg, landuse and pop density
 #PC3: Seasonality
+
+#environmental factors most important, followed by human factors
 
 
 ################################ Univariate Muff Models #################################
@@ -164,18 +176,19 @@ AICcmodavg::bictab(uni_fits, second.ord = FALSE)
 #tree_cover_hansen
 #northing
 
-sjPlot::plot_model(elev_uni_fit, type="re",
+#look at covariate estimates by individual
+sjPlot::plot_model(uni_fits$elevation, type="re",
                    transform=NULL,
                    axis.title = "Coefficient Estimates (Untransformed)",
                    title = "Responses to Elevation by Individual")
 
-check_model(elev_uni_fit)
+check_model(uni_fits$elevation)
 
 
 
 ################################ Univariate SSF Models #################################
 
-covs2 <- steps %>% 
+covs2 <- steps_scaled %>% 
   select(case_, step_id_, gpp:calving_season)
 #function to fit a univariate issf model for each covariate
 uni_fit_issf <- function(cov){
@@ -203,7 +216,7 @@ map(uni_fits_issf, AIC) %>%
 
 
 #global model--has convergence issues
-full_mod <- glmmTMB(case_ ~ gpp + npp + ndvi + evi + tree_cover_hansen + perc_tree_cover + perc_nontree_veg + perc_nonveg + land_cover_usfs + precip + dist_water + elevation + slope + northing + easting + tri +tpi + land_use_usfs + roads_hii + popdens_hii + landuse_hii + infra_hii + rails_hii + power_hii + season + hunting_season + calving_season + (1|animal_id), family = poisson, data = steps_scaled, doFit = FALSE)
+full_mod <- glmmTMB(case_ ~ gpp + npp + ndvi + evi + tree_cover_hansen + perc_tree_cover + perc_nontree_veg + perc_nonveg + land_cover_usfs + precip + dist_water + elevation + slope + northing + easting + tri +tpi + land_use_usfs + roads_hii + popdens_hii + landuse_hii + infra_hii + rails_hii + power_hii + season + hunting_season + calving_season + (1|animal_id), family = poisson, data = steps_scaled, doFit = FALSE, na.action = "na.fail")
 
 
 full_mod$parameters$theta[1] <-log(1e3)
@@ -211,14 +224,16 @@ full_mod$mapArg <-list(theta=factor(1))
 full_mod_fit <- glmmTMB::fitTMB(full_mod)
 
 
-dredge_full <- dredge(full_mod, rank=BIC)
+dredge_full <- dredge(full_mod_fit, rank=BIC) #not currently working
+
+
 
 
 ################################ Random Forest #################################
 
-#not currently working. Dataset too large. works for around 10,000 points
+#Use unscaled steps to get actual values in partial dependence plots.
 covs2 <- steps %>% 
-  select(animal_id, gpp:calving_season) %>% 
+  select(animal_id, gpp:calving_season, -c(land_cover_usfs_lumped, land_use_usfs_lumped)) %>% 
   dummify() %>% 
   mutate(case_=as.factor(covs$case_))
 

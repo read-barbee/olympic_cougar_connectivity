@@ -1,4 +1,4 @@
-dat4bugs <- function(data, timestep = 1)
+dat4jags <- function(data, timestep = 1)
 {
 #
 #	Code to convert typical Argos data into proper format for WinBUGS

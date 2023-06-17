@@ -84,7 +84,8 @@ data_al <- data2 %>%
          time = date_time_utc,
          x = lon_utm,
          y = lat_utm) %>% 
-  mutate(error.corr = 0)
+  mutate(error.corr = 0,
+         time = round_date(time, unit = "hour"))
 
 
 #Define prior distributions for errors of 2D and 3D fixes
@@ -109,6 +110,50 @@ crawl_hmm <- crawlWrap(obsData = data_al,
                          trace = 0),
                        attempts = 15,
                        ncores = 3)
+
+crawl_hmm_naive<- crawlWrap(obsData = data_al,
+                       timeStep = "2 hours",
+                       initialSANN = list(
+                         maxit = 1500,
+                         trace = 0),
+                       attempts = 15,
+                       ncores = 3)
+
+#bsam not working
+
+# al_bsam <- data_al %>% 
+#   mutate(lc= "G", .after = date_time_utc) %>% 
+#   rename(id = animal_id, date = date_time_utc, lon = lon_wgs84, lat = lat_wgs84) %>% 
+#   select(id, date, lc, lon, lat)
+# 
+# library(bsam)
+# bsam_test <- bsam::fit_ssm(data = al_bsam,
+#               model = "DCRW",
+#               tstep = 0.08333333,
+#               adapt = 10000,
+#               samples = 5000,
+#               thin = 5,
+#               span = 0.2)
+
+
+
+
+
+#compare predicted locations to original
+al_sf <- data_al %>% mutate(type = "observed") %>% st_as_sf(coords=c("x", "y"), crs=5070)
+smm_sf <-crawl_hmm$crwPredict %>%  as_tibble() %>% mutate(type = "predicted") %>% st_as_sf(coords=c("mu.x", "mu.y"), crs=5070)
+
+sf_combined <- rbind(smm_sf %>% select(time, type, geometry), al_sf %>% select(time, type, geometry))
+
+mapview::mapview(sf_combined, zcol = "type" )
+
+
+
+
+
+
+
+
 
 #format simulated data
 prep_dat <- prepData(crawl_hmm)
