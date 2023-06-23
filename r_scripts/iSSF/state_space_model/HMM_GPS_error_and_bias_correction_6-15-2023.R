@@ -149,12 +149,6 @@ mapview::mapview(sf_combined, zcol = "type" )
 
 
 
-
-
-
-
-
-
 #format simulated data
 prep_dat <- prepData(crawl_hmm)
 
@@ -167,6 +161,7 @@ acf(prep_dat$step[!is.na(prep_dat$step)],lag.max=300)
 
 #all plots (acf, step length, turning angle distributions)
 plot(prep_dat)
+
 
 
 ################################ HMMs for fun #################################
