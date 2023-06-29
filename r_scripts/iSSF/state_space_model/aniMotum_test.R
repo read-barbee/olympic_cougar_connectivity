@@ -35,12 +35,12 @@ al_dat <- data %>%
          lc = "G") %>% 
   na.omit()
 
-#convert Al's dataframe to sf object. Reproject to WGS 84 Pseudomercator to match polygon file. Recast as Multipoint
+#convert Al's dataframe to sf object. Recast as Multipoint
 al_sf <- al_dat %>% st_as_sf(coords= c("lon_wgs84", "lat_wgs84"), crs = 4326) %>% 
   select(animal_id, date_time_utc, lon_utm, lat_utm) %>% 
   rename(id = animal_id, date = date_time_utc, x=lon_utm, y=lat_utm) %>% 
   mutate(type = "original") %>% 
-  st_transform(crs = 3857) %>% 
+  st_transform(crs = 5070) %>% 
   st_cast("MULTIPOINT")
 
 ##################################################################
@@ -50,7 +50,7 @@ al_sf <- al_dat %>% st_as_sf(coords= c("lon_wgs84", "lat_wgs84"), crs = 4326) %>
 ##################################################################
 
 #Import water body polygons
-water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation.shp") 
+water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation.shp") %>% st_transform(crs = 5070)
 
 water_polys_filtered <- water_polys %>% filter(WB_PERIOD_ =="PER" ) #|WB_PERIOD_ =="INT"
 
@@ -76,7 +76,7 @@ mapview::mapview(water_polys_cropped)
 #can also specify angles and max distance for outlier spikes
 fit<- fit_ssm(al_dat, 
                 vmax = 20, 
-                model = "crw", 
+                model = "mp", 
                 time.step = 2, 
                 control = ssm_control(verbose = 0),
                 id = "animal_id", 
@@ -92,19 +92,23 @@ predicted <- grab(fit, what = "predicted")
 
 #convert fitted and predicted locations to sf objects
 fitted_sf <- fitted %>% st_as_sf(coords= c("lon", "lat"), crs = 4326) %>% 
+  st_transform(crs=5070) %>% 
   select(id:y) %>% 
   mutate(type="fitted")
 
-predicted_sf <- predicted %>% st_as_sf(coords= c("lon", "lat"), crs = 4326) %>% 
+predicted_sf <- predicted %>% st_as_sf(coords= c("lon", "lat"), crs = 4326) %>%
+  st_transform(crs=5070) %>% 
   select(id:y) %>% 
   mutate(type = "predicted")
 
-predicted_sf2 <- predicted_sf %>% 
-  st_transform(crs = 3857) %>% 
-  select(-type) %>% 
-  st_cast("MULTIPOINT") %>% 
-  summarise(do_union=FALSE) %>% 
-  st_geometry()
+map(fit, what = "predicted")
+
+# predicted_sf2 <- predicted_sf %>% 
+#   st_transform(crs = 3857) %>% 
+#   select(-type) %>% 
+#   st_cast("MULTIPOINT") %>% 
+#   summarise(do_union=FALSE) %>% 
+#   st_geometry()
 
 ##################################################################
 ##
@@ -121,8 +125,8 @@ visgraph <- pathroutr::prt_visgraph(water_polys_cropped, buffer = 15)
 # This is simplified by using the prt_reroute() funciton below:
 
 #Reroute the path based on the visibility network
-rerouted <- pathroutr::prt_reroute(predicted_sf2, water_polys_cropped, visgraph, blend = TRUE) %>% 
-  pathroutr::prt_update_points(predicted_sf2)
+rerouted <- pathroutr::prt_reroute(predicted_sf, water_polys_cropped, visgraph, blend = TRUE) %>% 
+  pathroutr::prt_update_points(predicted_sf)
 
 
 ##################################################################
@@ -133,18 +137,55 @@ rerouted <- pathroutr::prt_reroute(predicted_sf2, water_polys_cropped, visgraph,
 
 
 #compare original and fitted locations
-og_fitted <- rbind(al_sf, fitted_sf)
-fit_pred <- rbind(predicted_sf, fitted_sf )
-og_pred <- rbind(al_sf, predicted_sf)
 
 rr <- rbind(al_sf, rerouted %>% select(-fid))
 
 mapview::mapview(rr, zcol="type")
 
 
-mapview::mapview(og_fitted, zcol="type")
-mapview::mapview(fit_pred, zcol="type")
-mapview::mapview(og_pred, zcol="type")
+# og_fitted <- rbind(al_sf, fitted_sf)
+# fit_pred <- rbind(predicted_sf, fitted_sf )
+# og_pred <- rbind(al_sf, predicted_sf)
+# mapview::mapview(og_fitted, zcol="type")
+# mapview::mapview(fit_pred, zcol="type")
+# mapview::mapview(og_pred, zcol="type")
+
+#reproject rerouted path to Albers equal area
+rerouted2 <- rerouted %>% st_transform(crs=5070)
+
+#extract coordinates of imputed points for replacement in al_dat dataframe
+rerouted_coords <- rerouted2 %>% st_coordinates() %>% as_tibble()
+
+#retrieve the full Al dataset with missing locations
+al_dat_full <- data %>% 
+  filter(animal_id =="Al") %>% 
+  mutate(date_time_utc = round_date(date_time_utc, unit = "hour"),
+       date_time_local = round_date(date_time_local, unit = "hour")) %>% 
+  st_as_sf(coords=c("lon_utm", "lat_utm"), crs=5070, remove=FALSE, na.fail = FALSE)
+
+#Combine observed and imputed points
+al_dat_imp<- al_dat_full[-(1:2),] %>%
+  mutate(source = case_when(is.na(lat_utm) ~ "imputed", .default = source),
+         fix_type = case_when(is.na(lat_utm) ~ "imputed", .default = fix_type),
+         imp_status = case_when(is.na(lat_utm) ~ "imputed", .default = "observed"),
+         dop = case_when(is.na(lat_utm) ~ NA, .default = dop),
+         geometry = case_when(is.na(lat_utm) ~ rerouted2[-nrow(rerouted),]$geometry,.default = geometry),
+         lat_utm = case_when(is.na(lat_utm) ~ rerouted_coords[-nrow(rerouted),]$Y,.default = lat_utm),
+         lon_utm = case_when(is.na(lon_utm) ~ rerouted_coords[-nrow(rerouted),]$X, .default = lon_utm))
+
+
+#visualize full hybrid track
+al_sf2 <- al_dat_imp %>% st_as_sf(coords=c("lon_utm", "lat_utm"), crs=5070)
+
+mapview::mapview(al_sf2, zcol = "imp_status")
+
+
+##################################################################
+##
+## Extra: Path rerouting error checking
+##
+##################################################################
+
 
 
 #Error check visualizations

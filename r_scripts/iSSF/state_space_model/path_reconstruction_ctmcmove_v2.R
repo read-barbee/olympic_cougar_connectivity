@@ -172,20 +172,13 @@ mapview::mapview(bind_rows(path_sims), zcol="path_id")
 ##
 ##################################################################
 
-#fill missing locations with imputed points from ctmcmove (remove rows before first successful fix)
-
-# Find the index of the first non-NA value in col1
-# first_non_na <- which(!is.na(al_dat_full$lat_utm))[1]
-# 
-# # Remove rows before the first non-NA value
-# al_dat_trimmed <- al_dat_full %>%
-#   slice(first_non_na:n())
-
+#trim trailing timestamps with missing locations so the OG data matches the ctm model
 al_dat_trimmed <- al_dat_full %>% 
   filter(date_time_utc >= min(path_sims[[1]]$date_time_utc) & date_time_utc <= max(path_sims[[1]]$date_time_utc))
 
 
-combine_imputed2 <- foreach(i = 1:length(path_sims)) %dopar% {
+#Create a new dataframe for each imputed path with the missing original locations replaced by the imputed points
+combine_imputed <- foreach(i = 1:length(path_sims)) %dopar% {
   
   #initialize output list
   dat_imp <- list()
@@ -211,38 +204,128 @@ combine_imputed2 <- foreach(i = 1:length(path_sims)) %dopar% {
 }
 
 
-combine_imputed <- function(path_sim, og_dat_trimmed){
- 
-  #extract coordinates of imputed points for replacement in al_dat dataframe
-  rerouted_coords <- path_sim %>% st_coordinates() %>% as_tibble()
-  
-  #Combine observed and imputed points
-  dat_imp<- og_dat_trimmed %>%
-    mutate(source = case_when(is.na(lat_utm) ~ "imputed", .default = source),
-           fix_type = case_when(is.na(lat_utm) ~ "imputed", .default = fix_type),
-           imp_status = case_when(is.na(lat_utm) ~ "imputed", .default = "observed"),
-           dop = case_when(is.na(lat_utm) ~ NA, .default = dop),
-           #geometry = case_when(is.na(lat_utm) ~ rerouted$geometry,.default = geometry),
-           lat_utm = case_when(is.na(lat_utm) ~ rerouted_coords$Y,.default = lat_utm),
-           lon_utm = case_when(is.na(lon_utm) ~ rerouted_coords$X, .default = lon_utm))
-  
-  
-}
-
-test <- map(path_sims, combine_imputed, og_dat_trimmed = al_dat_trimmed)
-
-
 
 #visualize imputed points
-al_sf2 <- al_dat_imp %>% st_as_sf(coords=c("lon_utm", "lat_utm"), crs=5070)
+imputed_sf <- bind_rows(combine_imputed) %>% st_as_sf(coords=c("lon_utm", "lat_utm"), crs=5070)
 
 #paths_sf_combined <- bind_rows(al_sf2, paths_sf[[1]])
 
-mapview::mapview(al_sf2, zcol = "imp_status")
+mapview::mapview(imputed_sf, zcol = "path_id")
 
 
 
+##################################################################
+##
+## 5. Fit SSF to each path
+##
+##################################################################
+library(amt)
 
+cov_stack <- rast("data/Habitat_Covariates/puma_cov_stack_v1/cov_stack1.tif")
+
+#rename covariate bands
+names(cov_stack) <- c("tree_cover_hansen",
+                      "gpp",
+                      "infra_hii",
+                      "landuse_hii",
+                      "land_cover_usfs",
+                      "land_use_usfs",
+                      "npp",
+                      "popdens_hii",
+                      "power_hii",
+                      "precip",
+                      "rails_hii",
+                      "roads_hii",
+                      "elevation",
+                      "slope",
+                      "aspect",
+                      "tri",
+                      "tpi",
+                      "perc_tree_cover",
+                      "perc_nontree_veg",
+                      "perc_nonveg",
+                      "ndvi",
+                      "evi",
+                      "dist_water")
+
+#make tracks
+al_tracks <- foreach(i = 1:length(combine_imputed)) %dopar% {
+  al_tracks <- list()
+  al_tracks[[i]] <- make_track(combine_imputed[[i]], .x = lon_utm, .y = lat_utm, .t = date_time_utc, crs = utm_crs, check_duplicates = TRUE) %>% 
+    add_nsd() %>% 
+    mutate(sdr =sdr(.)) %>% 
+    flag_fast_steps(delta = 30) %>%  #experiment with different thresholds. calculate threshold with sdr function?
+    flag_roundtrips(delta = 30, epsilon = 2)
+}
+
+
+#redistribution_kernel()?
+#tracked_from_to() is a useful function for filtering tracks to relevant dates
+#flag_defunct_clusters() to identify clumps of no movement at end of track
+#from_to() gives time window of the track
+#make_issf_model allows more control over issf fit
+#get_distr() and movement_metrics no longer exist
+#sl_distr_params()
+#ta_distr_params()
+#range() gets numeric range of track
+#remove_capture()
+#ssf_weights() could be useful but no longer exists
+
+
+#inspect(al_tracks[[1]])
+
+#make steps
+al_steps <- foreach(i = 1:length(al_tracks)) %dopar% {
+  al_steps <- list()
+  al_steps[[i]] <- steps(al_tracks[[i]]) %>% 
+    random_steps(n_control = 10) %>% #generate random steps per used step
+    extract_covariates(cov_stack, where = "end") #extract covariates at start and end
+  }
+
+
+#fit issf to each track
+issf_fits <- foreach(i = 1:length(al_steps)) %dopar% {
+  issf_fits <- list()
+  issf_fits[[i]] <- fit_issf(al_steps[[i]], case_ ~ ndvi + tree_cover_hansen + tpi + popdens_hii + roads_hii + strata(step_id_))
+}
+
+issf_mods <-  foreach(i = 1:length(issf_fits)) %dopar% {
+  issf_mods <- list()
+  issf_mods[[i]] <- issf_fits[[i]]$model
+}
+
+#import og data without imputation
+steps <- read_csv("data/Location_Data/Steps/6h_steps_unscaled_6-02-2023.csv") %>% filter(animal_id=="Al")
+
+#fit issf to og data
+og_issf <- fit_issf(steps, case_ ~ ndvi + tree_cover_hansen + tpi + popdens_hii + roads_hii + strata(step_id_))
+issf_mods[[length(issf_mods) +1]] <- og_issf$model
+
+#compare coefficient estimates from og and imputed data
+test_plot <- sjPlot::plot_models(issf_mods, transform=NULL, axis.lim = c(-0.5, 0.5))
+plotly::ggplotly(test_plot)
+
+
+
+#plot net squared displacement to identify dispersal event**
+test <- add_nsd(al_tracks[[1]])
+
+plot( test$t_, test$nsd_)
+
+#useful for looking at path as line
+test2 <- as_sf_lines(al_tracks[[1]])
+mapview::mapview(test2)
+
+
+#random ctmm stuff...could maybe use this to impute instead of ctmcMove
+
+test <- fit_ctmm(al_tracks[[1]], model="auto")
+
+#occurrence distribution from ctmm_model: could be useful later
+test_od <- od(al_tracks[[1]], trast= cov_stack[[1]], model = test)
+
+ggplot() +
+  tidyterra::geom_spatraster(data = test_od)
 
 
 
@@ -429,6 +512,42 @@ abline(0,1,col="red")
 
 
 ################################ GRAVEYARD #################################
+
+
+# Find the index of the first non-NA value in col1
+# first_non_na <- which(!is.na(al_dat_full$lat_utm))[1]
+# 
+# # Remove rows before the first non-NA value
+# al_dat_trimmed <- al_dat_full %>%
+#   slice(first_non_na:n())
+
+
+combine_imputed <- function(path_sim, og_dat_trimmed){
+  
+  #extract coordinates of imputed points for replacement in al_dat dataframe
+  rerouted_coords <- path_sim %>% st_coordinates() %>% as_tibble()
+  
+  #Combine observed and imputed points
+  dat_imp<- og_dat_trimmed %>%
+    mutate(source = case_when(is.na(lat_utm) ~ "imputed", .default = source),
+           fix_type = case_when(is.na(lat_utm) ~ "imputed", .default = fix_type),
+           imp_status = case_when(is.na(lat_utm) ~ "imputed", .default = "observed"),
+           dop = case_when(is.na(lat_utm) ~ NA, .default = dop),
+           #geometry = case_when(is.na(lat_utm) ~ rerouted$geometry,.default = geometry),
+           lat_utm = case_when(is.na(lat_utm) ~ rerouted_coords$Y,.default = lat_utm),
+           lon_utm = case_when(is.na(lon_utm) ~ rerouted_coords$X, .default = lon_utm))
+  
+  
+}
+
+test <- map(path_sims, combine_imputed, og_dat_trimmed = al_dat_trimmed)
+
+
+
+
+
+
+
 
 #extract coordinates of imputed points for replacement in al_dat dataframe
 rerouted_coords <- path_sims[[1]] %>% st_coordinates() %>% as_tibble()

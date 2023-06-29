@@ -14,22 +14,22 @@ library(momentuHMM)
 library(sf)
 
 
-data <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_master_5-16-2023.csv", col_types = list(fix_type = col_character())) %>% 
+data <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_master_6-23-2023.csv", col_types = list(fix_type = col_character())) %>% 
   mutate(date_time_local = force_tz(date_time_local, tzone="US/Pacific"))
 
-#calculate utm coordinates
-data_sf <- data %>% 
-  na.omit() %>% 
-  st_as_sf(coords = c("longitude", "latitude"), crs=4326) %>% 
-  st_transform(crs = 5070)
-
-#append utm coordinates to original dataframe
-data2 <- data %>% 
-  na.omit() %>% 
-  rename(lat_wgs84 = latitude,
-         lon_wgs84 = longitude) %>% 
-  mutate(lat_utm = st_coordinates(data_sf)[,2],
-         lon_utm = st_coordinates(data_sf)[,1], .after=lon_wgs84)
+# #calculate utm coordinates
+# data_sf <- data %>% 
+#   na.omit() %>% 
+#   st_as_sf(coords = c("longitude", "latitude"), crs=4326) %>% 
+#   st_transform(crs = 5070)
+# 
+# #append utm coordinates to original dataframe
+# data2 <- data %>% 
+#   na.omit() %>% 
+#   rename(lat_wgs84 = latitude,
+#          lon_wgs84 = longitude) %>% 
+#   mutate(lat_utm = st_coordinates(data_sf)[,2],
+#          lon_utm = st_coordinates(data_sf)[,1], .after=lon_wgs84)
 
 
 
@@ -68,7 +68,7 @@ sd.lat[2] <-  37.18543#2D
 
 
 #Add error values based on t distribution
-data2<- data2 %>% mutate(sd.lon = case_when(fix_type =="3D" ~ sd.lon[1],
+data2<- data %>% mutate(sd.lon = case_when(fix_type =="3D" ~ sd.lon[1],
                                                     fix_type =="2D"~ sd.lon[2],
                                                     is.na(fix_type) ~ max(sd.lon[2])),
                               sd.lat = case_when(fix_type =="3D" ~ sd.lat[1],
@@ -100,6 +100,7 @@ data_al <- data2 %>%
 
 
 #Fit a continuous time corelated random walk (CTCRW) model to estimate locations for each regular time interval (2 hours)
+#error models not working
 crawl_hmm <- crawlWrap(obsData = data_al,
                        timeStep = "2 hours",
                        err.model = list(x = ~ log(sd.lon)-1,
@@ -118,6 +119,14 @@ crawl_hmm_naive<- crawlWrap(obsData = data_al,
                          trace = 0),
                        attempts = 15,
                        ncores = 3)
+
+
+#not working yet
+mult_imp <- MIfitHMM(miData = crawl_hmm_naive,
+                     nSims = 5,
+                     ncores = 10,
+                     nbStates = 2)
+
 
 #bsam not working
 
