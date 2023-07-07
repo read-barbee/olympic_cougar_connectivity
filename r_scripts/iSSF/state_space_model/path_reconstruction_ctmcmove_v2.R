@@ -324,6 +324,9 @@ test <- fit_ctmm(al_tracks[[1]], model="auto")
 #occurrence distribution from ctmm_model: could be useful later
 test_od <- od(al_tracks[[1]], trast= cov_stack[[1]], model = test)
 
+#extremely slow
+#boot <- ctmm.boot(data = al_telem, CTMM = test)
+
 ggplot() +
   tidyterra::geom_spatraster(data = test_od)
 

@@ -48,7 +48,7 @@ library(future)
 
 project_crs <- "epsg:5070" #NAD83 Albers Equal Area Projection
 
-resample_int_hours <- 6
+resample_int_hours <- 2 #also try 3 and 6
 
 tolerance_mins <- 15
 
@@ -56,17 +56,18 @@ rand_steps <- 20
 
 ############################### Import Location Data #################################
 # Mountain lion location data (May 2023)
-locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_6-1-2023.csv", col_types = list(fix_type = col_character()))
+locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-3-2023.csv", col_types = list(fix_type = col_character())) %>% 
+  mutate(date_time_local = with_tz(date_time_local, tzone = "US/Pacific"))
 
 # Mountain lion deployments  (September 2022)
-deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/collar_deployments_master_5-11-2023.csv")
+deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Deployments/collar_deployments_master_5-11-2023.csv")
 
 # Dispersal inventory from Teams (3-13-2023)
-dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/dispersals_master_5-11-2023.csv")
+dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_5-11-2023.csv")
 
 ############################### Import Covariate Data #################################
 
-cov_stack <- rast("data/Habitat_Covariates/puma_cov_stack_v1/cov_stack1.tif")
+cov_stack <- rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2.tif")
 
 #rename covariate bands
 names(cov_stack) <- c("tree_cover_hansen",
@@ -98,9 +99,6 @@ names(cov_stack) <- c("tree_cover_hansen",
 # terra::plot(cov_stack, parallel = TRUE)
 
 ################################ Data Cleaning/Formatting #################################
-
-#Make sure R recognizes the local time column in the correct time zone
-tz(locs_raw$date_time_local) <- "US/Pacific"
 
 #Filter deploment list to get one row per individual
 first_deps <- deployments %>% 
@@ -138,7 +136,7 @@ locs_nested <- locs_raw %>%
 #Create track for each animal
 
 multi_track <- function(d){
-  make_track(d, longitude, latitude, date_time_local, crs = 4326) %>% 
+  make_track(d, lon_wgs84, lat_wgs84, date_time_local, crs = 4326) %>% 
     transform_coords(crs_to = 5070)
 }
 
@@ -169,7 +167,7 @@ summary(sampling_rates)
 #function to calculate bursts for each individual---increment by hours to find optimum
 test_fun1 <- function(x) {
   x %>% 
-    amt::track_resample(rate = hours(6), tolerance = minutes(15)) %>% #resample to 2 hours
+    amt::track_resample(rate = hours(1), tolerance = minutes(15)) %>% #resample to 2 hours
     amt::filter_min_n_burst() #divide into bursts of min 3 pts
 }
 
@@ -196,6 +194,7 @@ indiv_to_remove <- locs_nested_test %>%
 #6 hours removes 10 individuals 
 
 #6 hours retains the most individuals
+# 2 hours may offer the best balance between data resolution and data loss
 
 
 ################################ Resample Tracks/Generate Steps/Extract covariate values #################################
