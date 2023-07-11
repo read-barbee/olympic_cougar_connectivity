@@ -39,6 +39,11 @@ deployments_master <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted
          end_date = mdy(end_date)) 
 #%>% distinct(deployment_id) %>% pull()
 
+collar_meta <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Collars/collar_model_list_partial.csv") %>% 
+  janitor::clean_names() %>% 
+  select(collar_id, collar_brand, collar_type, satellite_system) %>% 
+  mutate(collar_id = as.character(collar_id))
+
 ################################ Combine into single data frame #################################
 locs_all <- bind_rows(web_source,
                       hist_source,
@@ -128,7 +133,27 @@ trimmed_all <- trimmed_all %>%
   mutate(date_time_utc = as.character(date_time_utc),
          date_time_local = as.character(date_time_local))
 
-#write_csv(trimmed_all, "data/Location_Data/Source_Files/locations_master/gps_locs_master_7-11-2023.csv")
+utm_coords <- trimmed_all %>% 
+  sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, na.fail=FALSE) %>% 
+  st_transform(crs=5070) %>% 
+  st_coordinates()
+
+final <- trimmed_all %>% 
+  rename(lat_wgs84 = latitude,
+         lon_wgs84 = longitude) %>% 
+  mutate(lon_utm = utm_coords[,1],
+         lat_utm = utm_coords[,2],
+         dop = case_when(is.nan(lat_wgs84) ~ NA,
+                         .default = dop)) %>% 
+  mutate(lon_utm = case_when(is.nan(lon_utm) ~ NA,
+                             .default = lon_utm),
+         lat_utm = case_when(is.nan(lat_utm) ~ NA,
+                             .default = lat_utm)) %>%
+  relocate(c(lat_utm, lon_utm), .after=lon_wgs84) %>%
+  left_join(collar_meta, by=join_by(collar_id))
+  
+
+#write_csv(final, "data/Location_Data/Source_Files/locations_master/gps_locs_master_7-11-2023.csv")
 
 
 #create a file detailing the source file for each deployment
