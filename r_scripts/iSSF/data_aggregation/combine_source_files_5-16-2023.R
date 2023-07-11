@@ -33,8 +33,11 @@ collar_source <- read_csv("data/Location_Data/Source_Files/collar_source_5-16-20
                                                                                                          collar_id = col_character())) %>% 
   mutate(source = "collar_download")
 
-deployments_master <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/collar_deployments_master_5-11-2023.csv") %>%
-  mutate(deployment_id = paste0(name,"_",collar_id), .before=name) %>% distinct(deployment_id) %>% pull()
+deployments_master <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Deployments/collar_deployments_master_7-11-2023.csv") %>%
+  mutate(deployment_id = paste0(name,"_",collar_id), .before=name,
+         start_date = mdy(start_date),
+         end_date = mdy(end_date)) 
+#%>% distinct(deployment_id) %>% pull()
 
 ################################ Combine into single data frame #################################
 locs_all <- bind_rows(web_source,
@@ -51,18 +54,15 @@ get_dupes(locs_all, deployment_id, date_time_local)
 #make sure the location file contains all the deployments in the master deployment list
 locs_all_deps <- locs_all %>% distinct(deployment_id) %>% pull()
 
-setdiff(deployments_master, locs_all_deps)
-setdiff(locs_all_deps, deployments_master)
+setdiff(deployments_master %>% pull(deployment_id), locs_all_deps)
+setdiff(locs_all_deps, deployments_master %>% pull(deployment_id))
+
+setdiff(deployments_master %>% pull(deployment_id), trimmed_all %>% distinct(deployment_id) %>% pull())
 
 #total deployments: 171
 
 locs_all <- locs_all %>% 
   mutate(date_time_local = with_tz(date_time_utc, tzone="US/Pacific"))
-
-#with_tz doesn't print to csv unless coerced to a character.
-locs_all <- locs_all %>%
-  mutate(date_time_utc = as.character(date_time_utc),
-         date_time_local = as.character(date_time_local))
 
 #check to make sure all necessary fields are complete
 summary(locs_all)
@@ -73,11 +73,66 @@ locs_all %>% filter(!is.na(latitude) & is.na(dop))
 #replace all NAs in dop column with 0
 locs_all <- locs_all %>% mutate(dop=replace_na(dop, 0))
 
-write_csv(locs_all, "data/Location_Data/Source_Files/locations_master/gps_locs_master_5-16-2023.csv")
+################################# Step 4: Trim Tracks by deployment dates #################################
+
+locs_all_nested <- locs_all %>% nest_by(deployment_id)
+
+#Create function to extract deployments based on collar ID and deployment dates and append columns of animal_id and deployment_id 
+
+extract_deployments <- function(data_p, animal_id_p, collar_id_p, start_date_p, end_date_p) {
+  if (is.na(end_date_p) == TRUE){ #don't filter by end date if it's not included
+    trimmed_track <- data_p %>% 
+      filter(collar_id == collar_id_p) %>% 
+      filter(date_time_local>= ymd(start_date_p)) %>% 
+      mutate(animal_id = animal_id_p,
+             deployment_id = paste0(animal_id_p,"_",collar_id_p)) %>% 
+      select(deployment_id, animal_id, everything())
+  } else{
+    trimmed_track <- data_p %>% 
+      filter(collar_id == collar_id_p) %>% 
+      filter(date_time_local>= ymd(start_date_p) & date_time_local<=ymd(end_date_p)) %>% 
+      mutate(animal_id = animal_id_p,
+             deployment_id = paste0(animal_id_p,"_",collar_id_p)) %>% 
+      select(deployment_id, animal_id, everything())
+  }
+  
+  return(trimmed_track)
+}
+#create empty list to fill with data frames of trimmed individual tracks
+trimmed_deployments <- list()
+
+#loop to generate trimmed tracks for each deployment and append them to list (working)
+for (i in 1:(nrow(locs_all_nested)+1)) {
+  trimmed_deployments[[i]]<- extract_deployments(
+    data_p = locs_all,
+    animal_id_p = deployments_master$name[[i]],
+    collar_id_p = deployments_master$collar_id[[i]],
+    start_date_p = deployments_master$start_date[[i]],
+    end_date_p = deployments_master$end_date[[i]])
+}
+
+#combine all trimmed deployments into single dataframe
+trimmed_all <- bind_rows(trimmed_deployments)
+
+trimmed_all <- trimmed_all %>% 
+  filter(!(animal_id=="Moxie" & date_time_utc >ymd("2022-04-17"))) %>% #remove Moxie's post-relocation points
+  filter(deployment_id!="Gypsy_87521") #remove Gypsy's post-relocation points
+
+trimmed_sf <- trimmed_all %>% sf::st_as_sf(coords =c("longitude", "latitude"), crs = 4326, na.fail=FALSE) %>% nest_by(animal_id)
+
+mapview::mapview(trimmed_sf$data[[1]]) #needs geoscreening: 16, 29, 47, 63, 93, 108, 110
+
+
+#with_tz doesn't print to csv unless coerced to a character.
+trimmed_all <- trimmed_all %>%
+  mutate(date_time_utc = as.character(date_time_utc),
+         date_time_local = as.character(date_time_local))
+
+#write_csv(trimmed_all, "data/Location_Data/Source_Files/locations_master/gps_locs_master_7-11-2023.csv")
 
 
 #create a file detailing the source file for each deployment
-deployment_sources <- locs_all %>% distinct(deployment_id, source)
+deployment_sources <- trimmed_all %>% distinct(deployment_id, source)
 
 #write_csv(deployment_sources, "data/Location Data/Metadata/deployment_sources_5-16-2023.csv")
 
