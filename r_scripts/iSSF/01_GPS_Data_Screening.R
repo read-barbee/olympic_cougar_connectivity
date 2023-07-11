@@ -76,8 +76,15 @@ fix_success_rate <- global_fix_rate(locs_raw)
 
 fix_success_rate
 
+indiv_fix_rate <- locs_raw %>% 
+  nest_by(animal_id) %>% 
+  summarize(fix_success = global_fix_rate(data))
+
+hist(indiv_fix_rate$fix_success)
+
 #Make sure no essential fields are missing data
 summary(locs_raw %>% filter(!is.na(lat_wgs84)))
+DataExplorer::plot_missing(locs_raw)
 
 #make sure no locations with coordinates are missing dop scores. Get the names of the individuals that are if any
 locs_raw %>% 
@@ -100,7 +107,7 @@ locs_raw_filt <- locs_raw_no_na %>%
 
 #########################################################################
 ##
-## 4. Remove capture effects and low quality locations
+## 4. Remove capture effects
 ##
 ##########################################################################
 
@@ -113,12 +120,6 @@ cap_eff <- locs_raw_filt %>%
   filter(date_time_local >= (min(date_time_local) + hours(24))) %>% 
   ungroup() %>% 
   filter(!is.na(lat_wgs84))
-  
-  
-dop_filt <- cap_eff %>%  filter(dop<=5 | fix_type == "3D") %>%
-  mutate(unique_id= 1:nrow(.), .before = deployment_id) 
-
-#%>% filter(!(unique_id %in% c(44803, 214496, 182176, 132748, 213380, 78225)))
 
 #compare to minimum date times from original data frame to make sure it worked
 locs_raw %>%
@@ -129,7 +130,52 @@ cap_eff %>%
   group_by(animal_id) %>%
   summarize(min=min(date_time_local))
 
-#Remove locations outside of study area (removes 299 locations)
+#########################################################################
+##
+## 5. Remove low quality locations
+##
+##########################################################################  
+  
+dop_filt <- cap_eff %>%  filter(dop<=5 | fix_type == "3D") %>%
+  mutate(unique_id= 1:nrow(.), .before = deployment_id) 
+
+
+#Bjornerass filter (not working)
+# source("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/r_scripts/iSSF/Bjornerass_2010_GPS_screening_function.R")
+# 
+# nm_filt <- bjornerass_screening(animal_ids = cap_eff$animal_id, 
+#                                 long = cap_eff$lon_utm, 
+#                                 lat = cap_eff$lat_utm, 
+#                                 date_time = cap_eff$date_time_utc, 
+#                                 delta =100000, 
+#                                 mu = 20000, 
+#                                 alpha = 6000, 
+#                                 theta = (-0.97))
+# 
+# 
+# #aniMotum filter. Working, but kind of annoying to use. Removes 60684 locations
+# test <- aniMotum::fit_ssm(x = cap_eff %>% 
+#                             rename(id = animal_id,
+#                                                  date = date_time_utc,
+#                                                  lon = lon_wgs84,
+#                                                  lat =lat_wgs84) %>% 
+#                             mutate(lc = "G"),
+#                   vmax = 2,
+#                   ang = c(15, 25),
+#                   distlim = c(100000, 20000),
+#                   spdf = TRUE,
+#                   min.dt = 60,
+#                   pf = TRUE)
+
+
+
+
+#########################################################################
+##
+## 6. Remove locations outside of study area (removes 299 locations)
+##
+##########################################################################
+
 geo_filt <- dop_filt %>% sf::st_as_sf(coords=c("lon_wgs84", "lat_wgs84"), crs=4326, remove=FALSE) %>% 
   sf::st_crop(extent) 
 
@@ -144,6 +190,13 @@ geo_removed <- setdiff(dop_filt, geo_screened_df)
 #geo screening removes 298 points, most of which were in Berlin for Charlotte_28358 in December 2017. Ike also had a number of points in the same location in December 2018. Seems to be an uncorrectable sytematic gps error. Approximately 7 points are due to standard GPS error.
 geo_removed %>% sf::st_as_sf(coords=c("lon_wgs84", "lat_wgs84"), crs=4326, remove=FALSE) %>% 
   mapview::mapview()
+
+
+#########################################################################
+##
+## 7. Create summary table
+##
+##########################################################################
 
 location_attempts <- nrow(locs_raw_no_na)
 missing_locations <- nrow(locs_raw) - nrow(locs_raw_no_na)

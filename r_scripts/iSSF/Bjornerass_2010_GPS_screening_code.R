@@ -41,15 +41,15 @@
 
 ### Define Parameters
 
-# medcrit = ""
+# medcrit = "" 100 km 
 # 
-# meancrit = ""
+# meancrit = "" changed this:  10km in manuscript, Use 99.9% percentile of distances from mean of 10 fix moving window 
 # 
-# spikesp = ""
+# spikesp = "" changed this 6 km /hour 
 # 
-# spikecos = ""
+# spikecos = "" 0.97
 
-
+#example parameters for moose. Ran data through and looked at paths and tweaked until paths looked good. 
 
 
 ###STEP 1: Run the function GPS.screening 
