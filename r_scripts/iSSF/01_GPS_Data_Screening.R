@@ -37,10 +37,10 @@ library(janitor)
 ##
 ##########################################################################
 # Mountain lion location data (April 2023)
-locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_master_6-29-2023.csv",  col_types = list(fix_type = col_character()))
+locs_raw <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_master_7-11-2023.csv",  col_types = list(fix_type = col_character()))
 
 # Mountain lion deployments  (April 2023)
-deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Deployments/collar_deployments_master_5-11-2023.csv")
+deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Deployments/collar_deployments_master_7-11-2023.csv")
 
 # Dispersal inventory from Teams (3-13-2023)
 dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_5-11-2023.csv")
@@ -143,13 +143,13 @@ dop_filt <- cap_eff %>%  filter(dop<=5 | fix_type == "3D") %>%
 #Bjornerass filter (not working)
 # source("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/r_scripts/iSSF/Bjornerass_2010_GPS_screening_function.R")
 # 
-# nm_filt <- bjornerass_screening(animal_ids = cap_eff$animal_id, 
-#                                 long = cap_eff$lon_utm, 
-#                                 lat = cap_eff$lat_utm, 
-#                                 date_time = cap_eff$date_time_utc, 
-#                                 delta =100000, 
-#                                 mu = 20000, 
-#                                 alpha = 6000, 
+# nm_filt <- bjornerass_screening(animal_ids = cap_eff$animal_id,
+#                                 long = cap_eff$lon_utm,
+#                                 lat = cap_eff$lat_utm,
+#                                 date_time = cap_eff$date_time_utc,
+#                                 delta =100000,
+#                                 mu = 20000,
+#                                 alpha = 6000,
 #                                 theta = (-0.97))
 # 
 # 
@@ -198,9 +198,9 @@ geo_removed %>% sf::st_as_sf(coords=c("lon_wgs84", "lat_wgs84"), crs=4326, remov
 ##
 ##########################################################################
 
-location_attempts <- nrow(locs_raw_no_na)
+location_attempts <- nrow(locs_raw)
 missing_locations <- nrow(locs_raw) - nrow(locs_raw_no_na)
-unfiltered <- nrow(locs_raw_no_na)
+successful_locations <- nrow(locs_raw_no_na)
 missing_dop <- nrow(locs_raw_no_na) - nrow(locs_raw_filt)
 capture_effects <- nrow(locs_raw_filt) - nrow(cap_eff)
 dop_filter <- nrow(cap_eff) - nrow(dop_filt)
@@ -210,7 +210,7 @@ remaining <- nrow(geo_screened_df)
 summary_table <- tibble(Step = c("Location Attempts",
                                  "Missing Locations",
                                  "Success Rate",
-                                 "Total Locations", 
+                                 "Successful Locations", 
                                  "Missing DOP", 
                                  "Capture effects", 
                                  "DOP filter", 
@@ -219,7 +219,7 @@ summary_table <- tibble(Step = c("Location Attempts",
                         Locations_Removed = c(location_attempts,
                                               missing_locations,
                                               fix_success_rate,
-                                              unfiltered,
+                                              successful_locations,
                                               missing_dop,
                                               capture_effects,
                                               dop_filter,
@@ -229,5 +229,5 @@ summary_table <- tibble(Step = c("Location Attempts",
 summary_table
 
 
-#write_csv(geo_screened_df, "data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-3-2023.csv")
+#write_csv(geo_screened_df, "data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-11-2023.csv")
 
