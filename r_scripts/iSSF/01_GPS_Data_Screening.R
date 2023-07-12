@@ -114,12 +114,13 @@ locs_raw_filt <- locs_raw_no_na %>%
 
 ######## Remove first 24 hours for each animal to avoid capture effects (removes 1,781 points). Remove 2D fixes with dop > 5 (removes 27,397 points)
 
-
-cap_eff <- locs_raw_filt %>% 
+cap_eff <- locs_raw_filt %>%  ##### Removes Belle who only had 16 locations #######
   group_by(animal_id) %>% 
   filter(date_time_local >= (min(date_time_local) + hours(24))) %>% 
   ungroup() %>% 
   filter(!is.na(lat_wgs84))
+
+#setdiff(locs_raw_filt %>% distinct(animal_id), cap_eff %>% distinct(animal_id))
 
 #compare to minimum date times from original data frame to make sure it worked
 locs_raw %>%
