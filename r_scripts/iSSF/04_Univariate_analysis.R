@@ -49,11 +49,6 @@ steps <- steps %>%
 #%>% update_columns(c("sex", "dispersal_status", "case_", "land_cover_usfs", "land_use_usfs", "season", "hunting_season", "calving_season"), as.factor) %>% 
 
 
-
-
-
-
-
 #########################################################################
 ##
 ## 2. Check covariate distributions
@@ -217,6 +212,7 @@ covs <- steps_scaled %>%
   select(-c(sex:disp_qual))
 
 #function to fit a univariate Muff model with random effect for individual for each covariate
+
 uni_fit <- function(cov){
   form <- as.formula(paste0("case_ ~ ", 
                             #fixed effects
@@ -234,6 +230,10 @@ uni_fit <- function(cov){
   return(fit)
 }
 
+#control = glmmTMBControl(parallel = 9), in glmmTMB doesn't appear to be supported in mac
+
+#test <- uni_fit("gpp")
+
 # library(furrr)
 # plan(multisession, workers = 8)
 
@@ -242,62 +242,31 @@ cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
 #map the function across all covariates. Too big for future_map(). ~ 47 min
 system.time(uni_fits <- map(cov_names, uni_fit, .progress=TRUE)); beep("fanfare")
 
+names(uni_fits) <- cov_names
+
 #save model fits--huge file and takes forever. Probably not worth it.
 #save(uni_fits, file = "fitted_models/muff_uni_fits_imp_7-13-23.RData")
 
- # The same operation as above but in a for loop
-#initialize clusters for parallel computing. parallel doesn't seem to work though
-# n.clusters = 8
-# my.cluster <- parallel::makeCluster(n.clusters, type = "PSOCK")
-# doParallel::registerDoParallel(cl = my.cluster, cores = ncores)
-# 
-# cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
-# 
-# uni_fits <- list()
-# 
-# system.time(uni_fits <- foreach (i = 1:length(cov_names), .packages=c("glmmTMB"))%dopar%{
-#   
-#   cov <- cov_names[i]
-#   
-#   form <- as.formula(paste0("case_ ~ ", 
-#                        #fixed effects
-#                        cov, "+", 
-#                        #random intercept (strata)
-#                        "(1|step_id_) +",
-#                        #random slopes
-#                        "(0 +", cov, "| animal_id )"))
-#   
-#   
-#   uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
-#   
-#   uni_mod$parameters$theta[1] <-log(1e3)
-#   uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
-#   uni_fits[[i]] <- glmmTMB::fitTMB(uni_mod)
-#   
-# }); beep("fanfare")
-# 
-# parallel::stopCluster(cl = my.cluster)
-
 #muff_uni_table <- sjPlot::tab_model(uni_fits)
 
-#make table of AIC values for all univariate models
-# muff_aic <- AICcmodavg::aictab(uni_fits, second.ord = FALSE)
+#make table of AIC values for all univariate models--not working
+#muff_aic <- AICcmodavg::aictab(uni_fits, second.ord = FALSE)
 # muff_bic <- AICcmodavg::bictab(uni_fits, second.ord = FALSE)
 
 
-uni_fits2 <- uni_fits[3:length(uni_fits)]
+#uni_fits2 <- uni_fits[3:length(uni_fits)]
 
 ### Create model summary table of coefficient estimates and AIC/BIC values
 test_summ <- list()
 
-for (i in 1:length(uni_fits2)){
-  name <- names(uni_fits2)[[i]]
-  aic<- broom.mixed::glance(uni_fits2[[i]])$AIC
-  bic <- broom.mixed::glance(uni_fits2[[i]])$BIC
-  ll <- broom.mixed::glance(uni_fits2[[i]])$logLik
+for (i in 1:length(uni_fits)){
+  name <- cov_names[[i]]
+  aic<- broom.mixed::glance(uni_fits[[i]])$AIC
+  bic <- broom.mixed::glance(uni_fits[[i]])$BIC
+  ll <- broom.mixed::glance(uni_fits[[i]])$logLik
   
-  test_summ[[i]] <- broom.mixed::tidy(uni_fits2[[i]]) %>% 
-    filter(!(term %in% c("(Intercept)", "sd__(Intercept)"))) %>% 
+  test_summ[[i]] <- broom.mixed::tidy(uni_fits[[i]]) %>% 
+    filter(effect=="fixed" & !(term %in% c("(Intercept)", "sd__(Intercept)"))) %>% 
     #summarize(mean = mean(estimate), se = plotrix::std.error(estimate)) %>% 
     select(estimate:p.value) %>% 
     mutate(AIC = aic,
@@ -307,14 +276,17 @@ for (i in 1:length(uni_fits2)){
     select(name, everything())
 }
 
-muff_mod_summ <- bind_rows(test_summ) %>% filter(!grepl("usfs", name))
+muff_mod_summ <- bind_rows(test_summ)# %>% filter(!grepl("usfs", name))
 
+#write_csv(muff_mod_summ, "feature_selection/uni_muff_summary_imp_7-13-23.csv")
+
+# TPI, roads, popdens, rails, and power didn’t converge (no AIC or loglik vals)
 
 #look at covariate estimates by individual
-sjPlot::plot_model(uni_fits$elevation, type="re",
+sjPlot::plot_model(uni_fits$evi, type="re",
                    transform=NULL,
                    axis.title = "Coefficient Estimates (Untransformed)",
-                   title = "Responses to Elevation by Individual")
+                   title = "Responses to EVI by Individual")
 
 #not implemented for glmmTMB yet
 #performance::check_model(uni_fits$elevation)
@@ -360,3 +332,39 @@ issf_summary_tab <- tidy_list %>% left_join(mod_summ_issf, by= join_by(name)) %>
   mutate(name= case_when(term!="cov" ~ paste0(name, "_", term), .default = name)) %>% select(-term)
 
 #write_csv(issf_summary_tab, "feature_selection/uni_issf_summary_imp_7-12-23.csv")
+
+
+
+################################ GRAVEYARD #################################
+
+# Muff uni fits in a for loop
+#initialize clusters for parallel computing. parallel doesn't seem to work though
+# n.clusters = 8
+# my.cluster <- parallel::makeCluster(n.clusters, type = "PSOCK")
+# doParallel::registerDoParallel(cl = my.cluster, cores = ncores)
+# 
+# cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
+# 
+# uni_fits <- list()
+# 
+# system.time(uni_fits <- foreach (i = 1:length(cov_names), .packages=c("glmmTMB"))%dopar%{
+#   
+#   cov <- cov_names[i]
+#   
+#   form <- as.formula(paste0("case_ ~ ", 
+#                        #fixed effects
+#                        cov, "+", 
+#                        #random intercept (strata)
+#                        "(1|step_id_) +",
+#                        #random slopes
+#                        "(0 +", cov, "| animal_id )"))
+#   
+#   
+#   uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
+#   
+#   uni_mod$parameters$theta[1] <-log(1e3)
+#   uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
+#   uni_fits[[i]] <- glmmTMB::fitTMB(uni_mod)
+#   
+# }); beep("fanfare")
+# 
