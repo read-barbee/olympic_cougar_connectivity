@@ -20,8 +20,8 @@ library(GGally)
 ##
 ##########################################################################
 run_global <- function (dat){
-  library(survival)
-  mod <- survival::clogit(formula = case_ ~ 
+  #library(survival)  survival::clogit
+  mod <- amt::fit_issf(formula = case_ ~ 
                                         #prey 
                                         evi + I(evi^2) +
                                         dist_water + I(dist_water^2) +
@@ -34,35 +34,18 @@ run_global <- function (dat){
                                         roads_hii + I(roads_hii^2) +
                                         infra_hii + I(infra_hii^2) +
                                         #steps
-                                        sl_ + log(sl_) + cos(ta_) +
+                                        sl_ + log_sl_ + cos_ta_ +
                                         #strata
                                         strata(step_id_),
                                       data = dat,
-                                      na.action = "na.omit")
+                                      na.action = "na.omit",
+                                      model = TRUE)
   return(mod)
 }
 
-set_df_s1 <- function ()
+set_df_s1 <- function (indiv_dat)
 {
-  s1 <- data.frame(sl_ = 100, log_sl_ = log(100), cos_ta_ = 1,
-                   ruggedness_e = seq(from = -2, to = 2, length.out = 200),
-                   d2forestedge_e = 0, densforestedge_e = 0, ndvi_e = 0,
-                   densriparian_e = 0, densbuildings_e = 0, d2core_e = 0,
-                   ruggedness_s = 0, d2forestedge_s = 0, densforestedge_s = 0,
-                   ndvi_s = 0, densriparian_s = 0, densbuildings_s = 0,
-                   d2core_s = 0, `(sl_ + log_sl_ + cos_ta_)` = 0)
-  s1$ruggedness_e <- 0
-  return(s1)
-}
-
-#function to calculate log_rss object for elevation for each individual incorporating quadratic terms, sl and ta
-l_rss <- function(dat, indiv, curr_param){
-  indiv_dat <- dat %>% 
-    na.omit() %>% 
-    filter(animal_id == indiv) %>% 
-    unnest(cols=c(steps))
-  
-  #data frame varying elevation from min value to max value encountered by Al, holding all other covariates at the mean
+  #data frame varying elevation from min value to max value encountered by individual, holding all other covariates at the mean
   s1 <- data.frame(
     evi <-seq(from = -2, to =2, length.out = 200),
     
@@ -92,11 +75,11 @@ l_rss <- function(dat, indiv, curr_param){
     
     infra_hii2 <-mean(indiv_dat$infra_hii^2),
     
-    sl <- mean(indiv_dat$sl_),
+    sl_ <- mean(indiv_dat$sl_),
     
-    log_sl <- mean(indiv_dat$log_sl_),
+    log_sl_ <- mean(indiv_dat$log_sl_),
     
-    cos_ta <- mean(indiv_dat$cos_ta_)
+    cos_ta_ <- mean(indiv_dat$cos_ta_)
   ) %>% 
     rename(evi = 1,
            evi2 = 2,
@@ -112,99 +95,188 @@ l_rss <- function(dat, indiv, curr_param){
            roads_hii2 = 12,
            infra_hii = 13,
            infra_hii2 = 14,
-           sl= 15,
-           log_sl = 16,
-           cos_ta = 17
+           sl_= 15,
+           log_sl_ = 16,
+           cos_ta_ = 17
     )
   
   s1$evi <- mean(indiv_dat$evi)
-  
-  #### Continue Editing Function Here #######
-  
-  #data frame with means of all covariates encountered by Al
-  s2 <- data.frame(
-    elev_end <-mean(indiv_dat$elev_end),
+  return(s1)
+}
+
+set_df_s2 <- function (indiv_dat)
+{
+  #data frame with means of all covariates encountered by individual
+  s2 <-data.frame(
+    evi <-mean(indiv_dat$evi),
     
-    elev_end2 <-mean(indiv_dat$elev_end^2),
+    evi2 <-mean(indiv_dat$evi^2),
     
-    ndvi_end <- mean(indiv_dat$ndvi_end),
+    dist_water <- mean(indiv_dat$dist_water),
     
-    ndvi_end2 <-mean(indiv_dat$ndvi_end^2),
+    dist_water2 <-mean(indiv_dat$dist_water^2),
     
-    dist_water_end <- mean(indiv_dat$dist_water_end),
+    perc_tree_cover <- mean(indiv_dat$perc_tree_cover),
     
-    dist_water_end2 <-mean(indiv_dat$dist_water_end^2),
+    perc_tree_cover2 <-mean(indiv_dat$perc_tree_cover^2),
     
-    roads_hii_end <- mean(indiv_dat$roads_hii_end),
+    tpi <- mean(indiv_dat$tpi),
     
-    roads_hii_end2 <-mean(indiv_dat$roads_hii_end^2),
+    tpi2 <-mean(indiv_dat$tpi^2),
     
-    forest_end <- mean(indiv_dat$forest_end),
+    popdens_hii <- mean(indiv_dat$popdens_hii),
     
-    forest_end2 <-mean(indiv_dat$forest_end^2),
+    popdens_hii2 <-mean(indiv_dat$popdens_hii^2),
     
-    landuse_hii_end <- mean(indiv_dat$landuse_hii_end),
+    roads_hii <- mean(indiv_dat$roads_hii),
     
-    landuse_hii_end2 <-mean(indiv_dat$landuse_hii_end^2),
+    roads_hii2 <-mean(indiv_dat$roads_hii^2),
     
-    sl <- mean(indiv_dat$sl_),
+    infra_hii <-mean(indiv_dat$infra_hii),
     
-    log_sl <- mean(log(indiv_dat$sl_)),
+    infra_hii2 <-mean(indiv_dat$infra_hii^2),
     
-    cos_ta <- mean(cos(indiv_dat$ta_))
+    sl_ <- mean(indiv_dat$sl_),
+    
+    log_sl_ <- mean(indiv_dat$log_sl_),
+    
+    cos_ta_ <- mean(indiv_dat$cos_ta_)
   ) %>% 
-    rename(elev_end = 1,
-           elev_end2 = 2,
-           ndvi_end = 3,
-           ndvi_end2 = 4,
-           dist_water_end = 5,
-           dist_water_end2 = 6,
-           roads_hii_end = 7,
-           roads_hii_end2 = 8,
-           forest_end = 9,
-           forest_end2 = 10,
-           landuse_hii_end = 11,
-           landuse_hii_end2 = 12,
-           sl_= 13,
-           log_sl = 14,
-           ta_ = 15
+    rename(evi = 1,
+           evi2 = 2,
+           dist_water = 3,
+           dist_water2 = 4,
+           perc_tree_cover = 5,
+           perc_tree_cover2 = 6,
+           tpi = 7,
+           tpi2 = 8,
+           popdens_hii = 9,
+           popdens_hii2 = 10,
+           roads_hii = 11,
+           roads_hii2 = 12,
+           infra_hii = 13,
+           infra_hii2 = 14,
+           sl_= 15,
+           log_sl_ = 16,
+           cos_ta_ = 17
     )
+  return(s2)
+}
+
+classify_results <- function (tracks, curr_param)
+{
+  classifications <- data.frame(bear_name = NA, uncertain = NA,
+                                positive = NA)
+  classifications_ <- classifications
+  for (i in 1:nrow(tracks)) {
+    mod <- tracks$mod[[i]]
+    data <- tracks$data[[i]]
+    s1 <- set_df_s1()
+    if (curr_param == "NDVI") {
+      s1$ndvi_e <- seq(from = min(data$ndvi_e, na.rm = T),
+                       to = max(data$ndvi_e, na.rm = T), length.out = 200)
+    }
+    if (curr_param == "Ruggedness") {
+      s1$ruggedness_e <- seq(from = min(data$ruggedness_e,
+                                        na.rm = T), to = max(data$ruggedness_e, na.rm = T),
+                             length.out = 200)
+    }
+    if (curr_param == "D2forestedge") {
+      s1$d2forestedge_e <- seq(from = min(data$d2forestedge_e,
+                                          na.rm = T), to = max(data$d2forestedge_e, na.rm = T),
+                               length.out = 200)
+    }
+    if (curr_param == "Densforestedge") {
+      s1$densforestedge_e <- seq(from = min(data$densforestedge_e,
+                                            na.rm = T), to = max(data$densforestedge_e,
+                                                                 na.rm = T), length.out = 200)
+    }
+    if (curr_param == "Densriparian") {
+      s1$densriparian_e <- seq(from = min(data$densriparian_e,
+                                          na.rm = T), to = max(data$densriparian_e, na.rm = T),
+                               length.out = 200)
+    }
+    if (curr_param == "Densbuildings") {
+      s1$densbuildings_e <- seq(from = min(data$densbuildings_e,
+                                           na.rm = T), to = max(data$densbuildings_e, na.rm = T),
+                                length.out = 200)
+    }
+    if (curr_param == "D2core") {
+      s1$d2core_e <- seq(from = min(data$d2core_e, na.rm = T),
+                         to = max(data$d2core_e, na.rm = T), length.out = 200)
+    }
+    lr._ci_se <- amt::log_rss(mod, s1, s2, ci = "se", ci_level = 0.95)
+    classifications_$bear_name <- tracks$bear_name[[i]]
+    count_pos <- lr._ci_se$df %>% summarize(count_pos = sum(log_rss >
+                                                              0))
+    classifications_$positive <- ifelse(count_pos > 100,
+                                        T, F)
+    count_overlap <- lr._ci_se$df %>% rowwise %>% dplyr::summarize(count_overlap = sum(lwr <=
+                                                                                         0 && upr >= 0)) %>% dplyr::filter(count_overlap ==
+                                                                                                                             1)
+    count_overlap <- nrow(count_overlap)
+    classifications_$uncertain <- ifelse(count_overlap >
+                                           100, T, F)
+    classifications <- rbind(classifications, classifications_)
+  }
+  classifications <- classifications[-1, ]
+  classifications <- classifications %>% dplyr::group_by(bear_name) %>%
+    dplyr::arrange(bear_name)
+  classifications$plot.order <- 1:nrow(classifications)
+  return(classifications)
+}
+
+#function to calculate log_rss object for elevation for each individual incorporating quadratic terms, sl and ta
+l_rss <- function(indiv, dat, curr_param){
+  indiv_dat <- dat %>% 
+    filter(animal_id == indiv) %>% 
+    unnest(cols=c(steps)) %>% 
+    na.omit()
   
-  if (curr_param == "elev_end"){
-    s1$elev_end <- seq(from = min(indiv_dat$elev_end, na.rm=T), to = max(indiv_dat$elev_end, na.rm=T), length.out = 200)
+  s1 <- set_df_s1(indiv_dat)
+  s2 <- set_df_s2(indiv_dat)
+  
+  if (curr_param == "evi"){
+    s1$evi <- seq(from = min(indiv_dat$evi, na.rm=T), to = max(indiv_dat$evi, na.rm=T), length.out = 200)
   }
-  if (curr_param == "elev_end2"){
-    s1$elev_end2 <- seq(from = min((indiv_dat$elev_end)^2, na.rm=T), to = max((indiv_dat$elev_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "evi2"){
+    s1$evi2 <- seq(from = min((indiv_dat$evi)^2, na.rm=T), to = max((indiv_dat$evi)^2, na.rm=T), length.out = 200)
   }
-  if (curr_param == "ndvi_end"){
-    s1$ndvi_end <- seq(from = min(indiv_dat$ndvi_end, na.rm=T), to = max(indiv_dat$ndvi_end, na.rm=T), length.out = 200)
+  if (curr_param == "dist_water"){
+    s1$dist_water <- seq(from = min(indiv_dat$dist_water, na.rm=T), to = max(indiv_dat$dist_water, na.rm=T), length.out = 200)
   }
-  if (curr_param == "ndvi_end2"){
-    s1$ndvi_end2 <- seq(from = min((indiv_dat$ndvi_end)^2, na.rm=T), to = max((indiv_dat$ndvi_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "dist_water2"){
+    s1$dist_water2 <- seq(from = min((indiv_dat$dist_water)^2, na.rm=T), to = max((indiv_dat$dist_water)^2, na.rm=T), length.out = 200)
   }
-  if (curr_param == "forest_end"){
-    s1$forest_end <- seq(from = min(indiv_dat$forest_end, na.rm=T), to = max(indiv_dat$forest_end, na.rm=T), length.out = 200)
+  if (curr_param == "perc_tree_cover"){
+    s1$perc_tree_cover <- seq(from = min(indiv_dat$perc_tree_cover, na.rm=T), to = max(indiv_dat$perc_tree_cover, na.rm=T), length.out = 200)
   }
-  if (curr_param == "forest_end2"){
-    s1$forest_end2 <- seq(from = min((indiv_dat$forest_end)^2, na.rm=T), to = max((indiv_dat$forest_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "perc_tree_cover2"){
+    s1$perc_tree_cover2 <- seq(from = min((indiv_dat$perc_tree_cover)^2, na.rm=T), to = max((indiv_dat$perc_tree_cover)^2, na.rm=T), length.out = 200)
   }
-  if (curr_param == "dist_water_end"){
-    s1$dist_water_end <- seq(from = min(indiv_dat$dist_water_end, na.rm=T), to = max(indiv_dat$dist_water_end, na.rm=T), length.out = 200)
+  if (curr_param == "tpi"){
+    s1$tpi <- seq(from = min(indiv_dat$tpi, na.rm=T), to = max(indiv_dat$tpi, na.rm=T), length.out = 200)
   }
-  if (curr_param == "dist_water_end2"){
-    s1$dist_water_end2 <- seq(from = min((indiv_dat$dist_water_end)^2, na.rm=T), to = max((indiv_dat$dist_water_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "tpi2"){
+    s1$tpi2 <- seq(from = min((indiv_dat$tpi)^2, na.rm=T), to = max((indiv_dat$tpi)^2, na.rm=T), length.out = 200)
   }
-  if (curr_param == "roads_hii_end"){
-    s1$roads_hii_end <- seq(from = min(indiv_dat$roads_hii_end, na.rm=T), to = max(indiv_dat$roads_hii_end, na.rm=T), length.out = 200)
+  if (curr_param == "popdens_hii"){
+    s1$popdens_hii <- seq(from = min(indiv_dat$popdens_hii, na.rm=T), to = max(indiv_dat$popdens_hii, na.rm=T), length.out = 200)
   }
-  if (curr_param == "roads_hii_end2"){
-    s1$roads_hii_end2 <- seq(from = min((indiv_dat$roads_hii_end)^2, na.rm=T), to = max((indiv_dat$roads_hii_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "popdens_hii2"){
+    s1$popdens_hii2 <- seq(from = min((indiv_dat$popdens_hii)^2, na.rm=T), to = max((indiv_dat$popdens_hii)^2, na.rm=T), length.out = 200)
   }
-  if (curr_param == "landuse_hii_end"){
-    s1$landuse_hii_end <- seq(from = min(indiv_dat$landuse_hii_end, na.rm=T), to = max(indiv_dat$landuse_hii_end, na.rm=T), length.out = 200)
+  if (curr_param == "roads_hii"){
+    s1$roads_hii <- seq(from = min(indiv_dat$roads_hii, na.rm=T), to = max(indiv_dat$roads_hii, na.rm=T), length.out = 200)
   }
-  if (curr_param == "landuse_hii_end2"){
-    s1$landuse_hii_end2 <- seq(from = min((indiv_dat$landuse_hii_end)^2, na.rm=T), to = max((indiv_dat$landuse_hii_end)^2, na.rm=T), length.out = 200)
+  if (curr_param == "roads_hii2"){
+    s1$roads_hii2 <- seq(from = min((indiv_dat$roads_hii)^2, na.rm=T), to = max((indiv_dat$roads_hii)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "infra_hii"){
+    s1$infra_hii <- seq(from = min(indiv_dat$infra_hii, na.rm=T), to = max(indiv_dat$infra_hii, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "infra_hii2"){
+    s1$infra_hii2 <- seq(from = min((indiv_dat$infra_hii)^2, na.rm=T), to = max((indiv_dat$infra_hii)^2, na.rm=T), length.out = 200)
   }
   if (curr_param == "sl_"){
     s1$sl <- seq(from = min(indiv_dat$sl_, na.rm=T), to = max(indiv_dat$sl_, na.rm=T), length.out = 200)
@@ -216,16 +288,17 @@ l_rss <- function(dat, indiv, curr_param){
     s1$ta_ <- seq(from = min(indiv_dat$ta_, na.rm=T), to = max(indiv_dat$ta_, na.rm=T), length.out = 200)
   }
   
-  indiv_dat_nested <- dat %>% 
+  indiv_dat_nested <- dat %>%
     filter(animal_id == indiv)
   
-  mod <- indiv_dat_nested$fit2[[1]]
+  model <- indiv_dat_nested$global_fit[[1]]
   
   ### Working. variable names have to be the same across all data frames and model
-  l_rss_indiv <- amt::log_rss(mod, s1, s2, ci = "se", ci_level = 0.95)
+  l_rss_indiv <- amt::log_rss(model, s1, s2, ci = "se", ci_level = 0.95)
   
   return(l_rss_indiv$df)
 }
+
 
 #########################################################################
 ##
@@ -233,12 +306,13 @@ l_rss <- function(dat, indiv, curr_param){
 ##
 ##########################################################################
 
-steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_7-07-2023.csv")
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
 
 #set all negative elevations to 0
 steps <- steps %>% 
   mutate(elevation = ifelse(elevation < 0, 0, elevation)) %>% 
   select(-c(aspect_deg, aspect_rad))
+
 
 #########################################################################
 ##
@@ -249,7 +323,10 @@ steps <- steps %>% mutate(land_cover_usfs_lumped = fct_collapse(land_cover_usfs,
                                                                 shrubs = c("tall_shrubs", "shrubs", "gfh_shrub_mix", "barren_shrub_mix"),
                                                                 gfh = c("gfh", "barren_gfh_mix"),
                                                                 barren = c("barren_impervious", "snow_ice")),
-                          land_use_usfs_lumped = fct_collapse(land_use_usfs, agriculture = c("agriculture", "rangeland_pasture")), .after = land_cover_usfs)
+                          land_use_usfs_lumped = fct_collapse(land_use_usfs, agriculture = c("agriculture", "rangeland_pasture")), .after = land_cover_usfs) %>% 
+  select(-c(dispersing, disp_date_nsd)) %>% 
+  nest_by(animal_id) %>% 
+  rename(steps=data)
 
 #plot_bar(steps %>% select(gpp:calving_season))
 
@@ -258,11 +335,11 @@ steps <- steps %>% mutate(land_cover_usfs_lumped = fct_collapse(land_cover_usfs,
 ## 3. Scale continuous covariates for model comparison and analysis
 ##
 ##########################################################################
-
-steps_scaled <- steps %>% 
-  mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), scale)) %>% 
-  mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), as.numeric)) %>% 
-  nest_by(animal_id)
+# 
+# steps_scaled <- steps %>% 
+#   mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), scale)) %>% 
+#   mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), as.numeric)) %>% 
+#   nest_by(animal_id) %>% rename(steps=data)
 
 #plot_histogram(steps_scaled %>% select(sl_, ta_, gpp:power_hii))
 
@@ -274,12 +351,12 @@ steps_scaled <- steps %>%
 ##
 ##########################################################################
 
-
-global_fits <- steps_scaled %>%  
-  pull(data) %>% 
+#9 convergence issues with imputed set for clogit. 19 warnings for fit_issf
+global_fits <- steps %>%  
+  pull(steps) %>% 
   map(run_global)
 
-steps_scaled$global_fit <- global_fits
+steps$global_fit <- global_fits
 
 
 #########################################################################
@@ -288,16 +365,84 @@ steps_scaled$global_fit <- global_fits
 ##
 ##########################################################################
 
+test <-l_rss(dat = steps, indiv="Al", curr_param = "evi")
+
+indivs <- steps %>% pull(animal_id)
+
+steps$evi_rss <- map(indivs, l_rss, dat=steps, curr_param="evi")
 
 
-
-
-
-
-
-
-
-
+l_rss <- function(indiv, dat, curr_param){
+  indiv_dat <- steps %>% 
+    filter(animal_id == "Anniken") %>% 
+    unnest(cols=c(steps)) %>% View()
+    na.omit()
+  
+  s1 <- set_df_s1(indiv_dat)
+  s2 <- set_df_s2(indiv_dat)
+  
+  if (curr_param == "evi"){
+    s1$evi <- seq(from = min(indiv_dat$evi, na.rm=T), to = max(indiv_dat$evi, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "evi2"){
+    s1$evi2 <- seq(from = min((indiv_dat$evi)^2, na.rm=T), to = max((indiv_dat$evi)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "dist_water"){
+    s1$dist_water <- seq(from = min(indiv_dat$dist_water, na.rm=T), to = max(indiv_dat$dist_water, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "dist_water2"){
+    s1$dist_water2 <- seq(from = min((indiv_dat$dist_water)^2, na.rm=T), to = max((indiv_dat$dist_water)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "perc_tree_cover"){
+    s1$perc_tree_cover <- seq(from = min(indiv_dat$perc_tree_cover, na.rm=T), to = max(indiv_dat$perc_tree_cover, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "perc_tree_cover2"){
+    s1$perc_tree_cover2 <- seq(from = min((indiv_dat$perc_tree_cover)^2, na.rm=T), to = max((indiv_dat$perc_tree_cover)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "tpi"){
+    s1$tpi <- seq(from = min(indiv_dat$tpi, na.rm=T), to = max(indiv_dat$tpi, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "tpi2"){
+    s1$tpi2 <- seq(from = min((indiv_dat$tpi)^2, na.rm=T), to = max((indiv_dat$tpi)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "popdens_hii"){
+    s1$popdens_hii <- seq(from = min(indiv_dat$popdens_hii, na.rm=T), to = max(indiv_dat$popdens_hii, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "popdens_hii2"){
+    s1$popdens_hii2 <- seq(from = min((indiv_dat$popdens_hii)^2, na.rm=T), to = max((indiv_dat$popdens_hii)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "roads_hii"){
+    s1$roads_hii <- seq(from = min(indiv_dat$roads_hii, na.rm=T), to = max(indiv_dat$roads_hii, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "roads_hii2"){
+    s1$roads_hii2 <- seq(from = min((indiv_dat$roads_hii)^2, na.rm=T), to = max((indiv_dat$roads_hii)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "infra_hii"){
+    s1$infra_hii <- seq(from = min(indiv_dat$infra_hii, na.rm=T), to = max(indiv_dat$infra_hii, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "infra_hii2"){
+    s1$infra_hii2 <- seq(from = min((indiv_dat$infra_hii)^2, na.rm=T), to = max((indiv_dat$infra_hii)^2, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "sl_"){
+    s1$sl <- seq(from = min(indiv_dat$sl_, na.rm=T), to = max(indiv_dat$sl_, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "log_sl"){
+    s1$log_sl <- seq(from = min(indiv_dat$log_sl, na.rm=T), to = max(indiv_dat$log_sl, na.rm=T), length.out = 200)
+  }
+  if (curr_param == "ta_"){
+    s1$ta_ <- seq(from = min(indiv_dat$ta_, na.rm=T), to = max(indiv_dat$ta_, na.rm=T), length.out = 200)
+  }
+  
+  indiv_dat_nested <- dat %>%
+    filter(animal_id == indiv)
+  
+  model <- indiv_dat_nested$global_fit[[1]]
+  
+  ### Working. variable names have to be the same across all data frames and model
+  l_rss_indiv <- amt::log_rss(model, s1, s2, ci = "se", ci_level = 0.95)
+  
+  return(l_rss_indiv$df)
+}
 
 
 

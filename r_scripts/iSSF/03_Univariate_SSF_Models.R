@@ -44,12 +44,21 @@ library(randomForest)
 ##
 ##########################################################################
 
-steps <- read_csv("data/Location_Data/Steps/6h_steps_unscaled_7-03-2023.csv")
+#choose whether to use steps without imputation, imputation but no rerouting, or iimputation and rerouting
 
-#set all negative elevations to 0
+#no imputation
+#steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
+
+#imputed and rerouted
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
+
+
+#set all negative elevations to 0 and filter dispersal tracks for post dispersal event
 steps <- steps %>% 
   mutate(elevation = ifelse(elevation < 0, 0, elevation)) %>% 
-  select(-c(aspect_deg, aspect_rad))
+  select(-c(aspect_deg, aspect_rad)) %>% 
+  filter(is.na(dispersing) | dispersing==TRUE)
+
 
 #%>% update_columns(c("sex", "dispersal_status", "case_", "land_cover_usfs", "land_use_usfs", "season", "hunting_season", "calving_season"), as.factor) %>% 
 
@@ -153,9 +162,10 @@ for (i in 1:nrow(high_cor_pairs)) {
 
 #ordered list of correlated covariates
 cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>% 
-filter(corr < 0.977) %>% 
+#filter(corr < 0.977) %>% 
 arrange(desc(corr))
 
+#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_imp_7-12-23.csv")
 
 #the GGAlly package corrplot is more informative for numeric variables
 ggcorr(steps_scaled %>% 
@@ -208,19 +218,29 @@ plot_prcomp(steps_scaled %>% na.omit() %>% select(gpp:calving_season), nrow=1, n
 ##########################################################################
 #subset dataframe to only include animal_id, case_, and all predictors
 covs <- steps_scaled %>% 
-  select(case_, animal_id, gpp:calving_season)
+  select(case_, animal_id, step_id_, gpp:calving_season)
+
+
+# library(furrr)
+# plan(multisession, workers = 8)
 
 #function to fit a univariate Muff model with random effect for individual for each covariate
 uni_fit <- function(cov){
-  uni_mod <- glmmTMB(case_ ~ cov + (1|animal_id) , family =poisson, data = covs, doFit = FALSE)
+  uni_mod <- glmmTMB(case_ ~ 
+                       #fixed effects
+                       cov + 
+                       #random intercept (strata)
+                       (1|step_id_) +
+                       #random slopes
+                       (0 + cov | animal_id ) , family =poisson, data = covs, doFit = FALSE)
+  
   uni_mod$parameters$theta[1] <-log(1e3)
-  uni_mod$mapArg <-list(theta=factor(1))
+  uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
   fit <- glmmTMB::fitTMB(uni_mod)
   
   return(fit)
 }
 
-#+  (0 + cov|animal_id)
 
 #map the function across all covariates
 uni_fits <- map(covs, uni_fit)
