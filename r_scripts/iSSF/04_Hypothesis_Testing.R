@@ -324,8 +324,13 @@ steps <- steps %>% mutate(land_cover_usfs_lumped = fct_collapse(land_cover_usfs,
                                                                 gfh = c("gfh", "barren_gfh_mix"),
                                                                 barren = c("barren_impervious", "snow_ice")),
                           land_use_usfs_lumped = fct_collapse(land_use_usfs, agriculture = c("agriculture", "rangeland_pasture")), .after = land_cover_usfs) %>% 
-  select(-c(dispersing, disp_date_nsd)) %>% 
-  nest_by(animal_id) %>% 
+  select(-c(dispersing, disp_date_nsd, disp_qual)) %>% 
+  # dummify(select=c("land_cover_usfs_lumped",
+  #                  "land_use_usfs_lumped",
+  #                  "season",
+  #                  "hunting_season",
+  #                  "calving_season")) %>% 
+  nest_by(animal_id, sex, dispersal_status) %>% 
   rename(steps=data)
 
 #plot_bar(steps %>% select(gpp:calving_season))
@@ -365,84 +370,97 @@ steps$global_fit <- global_fits
 ##
 ##########################################################################
 
-test <-l_rss(dat = steps, indiv="Al", curr_param = "evi")
-
 indivs <- steps %>% pull(animal_id)
 
 steps$evi_rss <- map(indivs, l_rss, dat=steps, curr_param="evi")
+steps$dist_water_rss <- map(indivs, l_rss, dat=steps, curr_param="dist_water")
+steps$perc_tree_cover_rss <- map(indivs, l_rss, dat=steps, curr_param="perc_tree_cover")
+steps$tpi_rss <- map(indivs, l_rss, dat=steps, curr_param="tpi")
+steps$popdens_hii_rss <- map(indivs, l_rss, dat=steps, curr_param="pop_dens_hii")
+steps$roads_hii_rss <- map(indivs, l_rss, dat=steps, curr_param="roads_hii")
+steps$infra_hii_rss <- map(indivs, l_rss, dat=steps, curr_param="infra_hii")
 
 
-l_rss <- function(indiv, dat, curr_param){
-  indiv_dat <- steps %>% 
-    filter(animal_id == "Anniken") %>% 
-    unnest(cols=c(steps)) %>% View()
-    na.omit()
+#########################################################################
+##
+##5. Make RSS plots
+##
+##########################################################################
+
+
+#pivot data for faceting
+rss_plot_dat <- steps %>% 
+  pivot_longer(evi_rss:infra_hii_rss, names_to= "cov", values_to = "rss_val")
+
+
+#initialize blank lists for loop
+ls = list()
+ls2=list()
+
+
+#extract covariate ranges and log_rss values for each covariate and individual
+for(i in 1:nrow(rss_plot_dat)){
   
-  s1 <- set_df_s1(indiv_dat)
-  s2 <- set_df_s2(indiv_dat)
-  
-  if (curr_param == "evi"){
-    s1$evi <- seq(from = min(indiv_dat$evi, na.rm=T), to = max(indiv_dat$evi, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "evi_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$evi_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "evi2"){
-    s1$evi2 <- seq(from = min((indiv_dat$evi)^2, na.rm=T), to = max((indiv_dat$evi)^2, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "dist_water_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$dist_water_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "dist_water"){
-    s1$dist_water <- seq(from = min(indiv_dat$dist_water, na.rm=T), to = max(indiv_dat$dist_water, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "perc_tree_cover_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$perc_tree_cover_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "dist_water2"){
-    s1$dist_water2 <- seq(from = min((indiv_dat$dist_water)^2, na.rm=T), to = max((indiv_dat$dist_water)^2, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "tpi_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$tpi_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "perc_tree_cover"){
-    s1$perc_tree_cover <- seq(from = min(indiv_dat$perc_tree_cover, na.rm=T), to = max(indiv_dat$perc_tree_cover, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "popdens_hii_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$popdens_hii_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "perc_tree_cover2"){
-    s1$perc_tree_cover2 <- seq(from = min((indiv_dat$perc_tree_cover)^2, na.rm=T), to = max((indiv_dat$perc_tree_cover)^2, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "roads_hii_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$roads_hii_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "tpi"){
-    s1$tpi <- seq(from = min(indiv_dat$tpi, na.rm=T), to = max(indiv_dat$tpi, na.rm=T), length.out = 200)
+  if(rss_plot_dat$cov[i] == "infra_hii_rss"){
+    ls[[i]] <- rss_plot_dat$rss_val[[i]]$infra_hii_x1
+    ls2[[i]] = rss_plot_dat$rss_val[[i]]$log_rss
   }
-  if (curr_param == "tpi2"){
-    s1$tpi2 <- seq(from = min((indiv_dat$tpi)^2, na.rm=T), to = max((indiv_dat$tpi)^2, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "popdens_hii"){
-    s1$popdens_hii <- seq(from = min(indiv_dat$popdens_hii, na.rm=T), to = max(indiv_dat$popdens_hii, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "popdens_hii2"){
-    s1$popdens_hii2 <- seq(from = min((indiv_dat$popdens_hii)^2, na.rm=T), to = max((indiv_dat$popdens_hii)^2, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "roads_hii"){
-    s1$roads_hii <- seq(from = min(indiv_dat$roads_hii, na.rm=T), to = max(indiv_dat$roads_hii, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "roads_hii2"){
-    s1$roads_hii2 <- seq(from = min((indiv_dat$roads_hii)^2, na.rm=T), to = max((indiv_dat$roads_hii)^2, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "infra_hii"){
-    s1$infra_hii <- seq(from = min(indiv_dat$infra_hii, na.rm=T), to = max(indiv_dat$infra_hii, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "infra_hii2"){
-    s1$infra_hii2 <- seq(from = min((indiv_dat$infra_hii)^2, na.rm=T), to = max((indiv_dat$infra_hii)^2, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "sl_"){
-    s1$sl <- seq(from = min(indiv_dat$sl_, na.rm=T), to = max(indiv_dat$sl_, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "log_sl"){
-    s1$log_sl <- seq(from = min(indiv_dat$log_sl, na.rm=T), to = max(indiv_dat$log_sl, na.rm=T), length.out = 200)
-  }
-  if (curr_param == "ta_"){
-    s1$ta_ <- seq(from = min(indiv_dat$ta_, na.rm=T), to = max(indiv_dat$ta_, na.rm=T), length.out = 200)
-  }
-  
-  indiv_dat_nested <- dat %>%
-    filter(animal_id == indiv)
-  
-  model <- indiv_dat_nested$global_fit[[1]]
-  
-  ### Working. variable names have to be the same across all data frames and model
-  l_rss_indiv <- amt::log_rss(model, s1, s2, ci = "se", ci_level = 0.95)
-  
-  return(l_rss_indiv$df)
 }
+
+
+#add lists from for loop to data frame and facet plot by sex (Melodie's RSS values don't make any sense)
+
+rss_plot_dat$cov_vals <- ls
+rss_plot_dat$rss_vals <- ls2
+
+
+#pretty weird looking
+
+evi_rss_uni <- rss_plot_dat %>% 
+  # filter(animal_id!="Melodie") %>% #remove individuals with outlying values skewing plots
+  # filter(animal_id!="Sampson") %>%
+  # filter(animal_id!="Kingsley") %>%
+  select(-rss_val) %>% 
+  filter(cov=="evi_rss") %>% 
+  filter(sex=="Male") %>% 
+  unnest(cols=c(cov_vals, rss_vals)) %>% 
+  ggplot(., aes(x = cov_vals, y = rss_vals)) +
+  geom_smooth(linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  xlab("Covariate Values") +
+  ylab("log-RSS vs Mean Covariate Value") +
+  theme_bw() +
+  facet_wrap(~animal_id, scales = "free")
+
+plotly::ggplotly(evi_rss_uni)
+
+
+
+
 
 
 

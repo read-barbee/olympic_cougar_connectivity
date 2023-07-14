@@ -23,6 +23,8 @@ library(randomForest)
 library(doParallel)
 library(beepr)
 
+## imputation just seems to make confidence intervals wider and estimates worse
+
 
 #########################################################################
 ##
@@ -278,7 +280,7 @@ for (i in 1:length(uni_fits)){
 
 muff_mod_summ <- bind_rows(test_summ)# %>% filter(!grepl("usfs", name))
 
-#write_csv(muff_mod_summ, "feature_selection/uni_muff_summary_imp_7-13-23.csv")
+#write_csv(muff_mod_summ, "feature_selection/uni_muff_summary_no_imp_7-13-23.csv")
 
 # TPI, roads, popdens, rails, and power didn’t converge (no AIC or loglik vals)
 
@@ -333,6 +335,100 @@ issf_summary_tab <- tidy_list %>% left_join(mod_summ_issf, by= join_by(name)) %>
 
 #write_csv(issf_summary_tab, "feature_selection/uni_issf_summary_imp_7-12-23.csv")
 
+
+#########################################################################
+##
+## 8. Random Forest
+##
+##########################################################################
+
+# #Use unscaled steps to get actual values in partial dependence plots.
+# covs3 <- steps %>% 
+#   #select(animal_id, gpp:calving_season, -c(land_cover_usfs, land_use_usfs)) %>% 
+#   dummify() %>% 
+#   dplyr::mutate(case_=as.factor(covs$case_))
+
+covs3 <- steps %>% 
+  select(animal_id, gpp:calving_season, -c(land_cover_usfs, land_use_usfs)) %>% 
+  dummify() %>% 
+  dplyr::mutate(case_=as.factor(steps$case_))
+
+covs3 <- covs3 %>% na.omit()
+
+rf_fits <- list()
+
+n_trials <- 5
+
+#fit multiple rf models sampling the data differently
+for (i in 1:n_trials){
+  data_set_size <- floor(nrow(covs3)*0.80)
+  index <- sample(1:nrow(covs3), size = 5000)
+  training <- covs3[index,]
+  testing <- covs3[-index,]
+  
+  rf_fits[[i]] <- randomForest(case_ ~ ., data = training, mtry = 4, ntree = 501, importance = TRUE, type="classification")
+}
+
+#combine all fitted rf models
+rf_combined <- randomForest::combine(rf_fits[[1]], rf_fits[[2]] , rf_fits[[3]], rf_fits[[4]], rf_fits[[5]])
+
+#create clean dataframe
+rf_combined_imp <- as_tibble(rf_combined$importance) %>% 
+  janitor::clean_names() %>% 
+  mutate(cov = rownames(rf_combined$importance), .before = false)
+
+#write_csv(rf_combined_imp, "rf_combined_imp_7-6-23.csv")
+
+#basic plot
+plot(rf_fits[[1]])
+
+varImpPlot(rf_combined)
+
+#partial dependence plots n=40 variables
+dev.new(width = 8, height = 8)
+#par(mar = c(2, 2, 2, 2))
+par(mfrow = c(4, 5))
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = evi, main= "EVI")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = elevation, main= "Elevation")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = perc_nontree_veg, main = "Perc_nontree_veg")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = ndvi, main= "NDVI")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = npp, main="NPP")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = gpp, main = "GPP")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = perc_nonveg, main = "Perc_nonveg")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = precip, main = "Precip")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = popdens_hii, main = "Popdens_hii")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = perc_tree_cover, main = "Perc_tree_cover")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = tri, main = "TRI")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = tpi, main = "TPI")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = northing, main = "Northing")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = slope, main = "Slope")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = roads_hii, main = "Roads_hii")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = tree_cover_hansen, main = "Tree_cover_hansen")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = easting, main = "Easting")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = dist_water, main = "Dist_water")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = power_hii, main = "Power_hii")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = landuse_hii, main = "Landuse_hii")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = rails_hii, main = "Rails_hii")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = infra_hii, main = "Infra_hii")
+
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_cover_usfs_lumped_trees, main = "Landcover_trees")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_cover_usfs_lumped_shrubs, main = "Landcover_shrubs")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_cover_usfs_lumped_gfh, main = "Landcover_gfh")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_cover_usfs_lumped_barren, main = "Landcover_barren")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_cover_usfs_lumped_water, main = "Landcover_water")
+
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_use_usfs_lumped_forest, main = "Landuse_forest")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_use_usfs_lumped_developed, main = "Landuse_developed")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_use_usfs_lumped_agriculture, main = "Landuse_agriculture")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_use_usfs_lumped_non_forest_wetland, main = "Landuse_wetland")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = land_use_usfs_lumped_other, main = "Landuse_other")
+
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = season_dry, main = "Season_dry")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = season_wet, main = "Season_wet")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = hunting_season_yes, main = "Hunting_season_yes")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = hunting_season_no, main = "Hunting_season_no")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = calving_season_no, main = "Calving_season_no")
+partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = calving_season_yes, main = "Calving_season_yes")
 
 
 ################################ GRAVEYARD #################################
