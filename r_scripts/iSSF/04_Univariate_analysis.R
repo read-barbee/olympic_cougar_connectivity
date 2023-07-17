@@ -130,7 +130,7 @@ cor_matrix <- cor(dummy)
 # #convert identified indices to covariate names
 # dummy %>% select(!!!high_cor) %>% names()
 
-threshold <- 0.3
+threshold <- 0.5
 
 high_cor_pairs <- which(cor_matrix > threshold, arr.ind = TRUE)
 high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
@@ -151,7 +151,7 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
   #filter(corr < 0.977) %>% 
   arrange(desc(corr))
 
-#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_imp_7-12-23.csv")
+#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_t5_no_imp_7-17-23.csv")
 
 #the GGAlly package corrplot is more informative for numeric variables
 ggcorr(steps_scaled %>% 
@@ -301,17 +301,45 @@ sjPlot::plot_model(uni_fits$evi, type="re",
 
 covs2 <- steps_scaled %>% 
   select(case_, step_id_, gpp:calving_season)
+
 #function to fit a univariate issf model for each covariate
 uni_fit_issf <- function(cov){
   uni_mod <- fit_issf(data=covs2, case_ ~ cov + strata(step_id_))
   return(uni_mod)
 }
 
-#map the function across all covariates
+#remove categorical covariates for fitting quadratic models
+covs_num <- covs2 %>% select(-c(land_cover_usfs, land_cover_usfs_lumped, land_use_usfs, land_use_usfs_lumped, season:calving_season))
+
+#fit quadratic models for eaach covaraiteto see how they compare
+uni_fit_issf_quad <- function(cov){
+  uni_mod <- fit_issf(data=covs_num, case_ ~ cov + I(cov^2) + strata(step_id_))
+  return(uni_mod)
+}
+
+#map linear function across all covariates
 uni_fits_issf <- map(covs2, uni_fit_issf)
 
+#map quadratic function across all covariates
+uni_fits_issf_q <- map(covs_num, uni_fit_issf_quad)
 
-uni_fits_issf2 <- uni_fits_issf[3:length(uni_fits_issf)]
+#Remove case_and step_length columns after fitting models
+uni_fits_issf_q2 <- uni_fits_issf_q[3:length(uni_fits_issf_q)]
+
+#rename qudaratic covariates with "2" at the end
+new_names <- vector()
+for(i in 1:length(uni_fits_issf_q2)){
+  old_name <- names(uni_fits_issf_q2)[i]
+  new_names[i] <- paste0(old_name, "2")
+}
+
+names(uni_fits_issf_q2) <- new_names
+
+#combine linear and quadratic fits
+uni_fits_issf_all <- c(uni_fits_issf, uni_fits_issf_q2)
+
+#remove case_ and sl_ terms
+uni_fits_issf2 <- uni_fits_issf_all[3:length(uni_fits_issf_all)]
 
 #create model summary table of coefficient estimates and AIC/BIC values
 tidy_list <- list()
@@ -333,7 +361,10 @@ mod_summ_issf <- bind_rows(mod_summ_issf)
 issf_summary_tab <- tidy_list %>% left_join(mod_summ_issf, by= join_by(name)) %>% 
   mutate(name= case_when(term!="cov" ~ paste0(name, "_", term), .default = name)) %>% select(-term)
 
-#write_csv(issf_summary_tab, "feature_selection/uni_issf_summary_imp_7-12-23.csv")
+#remove redundant linear terms from quadratic models
+issf_summary_tab_filt <- issf_summary_tab %>% filter(str_detect(name, "2_") ==TRUE | str_detect(name, "2")==FALSE)
+
+#write_csv(issf_summary_tab_filt, "feature_selection/uni_issf_summary_quad_no_imp_7-17-23.csv")
 
 
 #########################################################################
