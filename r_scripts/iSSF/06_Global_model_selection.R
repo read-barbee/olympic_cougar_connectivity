@@ -238,8 +238,15 @@ names(cov_stack) <- c("tree_cover_hansen",
 # 
 # cov_stack_values <- values(cov_stack[[1:2]]) %>% data.frame() %>% 
 #  cov_stack_values %>% na.omit()
-  
 
+#crop cov_stack to extent of individual data to save memory when projecting
+indiv_sf <- al %>% st_as_sf(coords=c("x1_", "y1_"), crs = 5070)
+indiv_poly <- indiv_sf %>% sf::st_buffer(dist = 10000) %>%
+  sf::st_union() %>%
+  sf::st_convex_hull()
+cov_stack_cropped <- terra::crop(cov_stack, indiv_poly)
+  
+system.time(tmp <- ncde_4fold(forms[[2]], al, cov_stack_cropped))
 
 ncde_4fold <- function (form, dat, cov_stack) {
   # Split out the used GPS points and the available points:
@@ -258,17 +265,10 @@ ncde_4fold <- function (form, dat, cov_stack) {
     train <- dplyr::filter(trn.tst, group != i)
     test <- dplyr::filter(trn.tst, group == i)
     # Fit the model to the subsetted training dataset:
-    library(survival)
-    mod.fit <- fit_issf(formula = forms[[i]], data = train, model=TRUE)
-    #crop cov_stack to extent of individual data to save memory when projecting
-    indiv_sf <- al %>% st_as_sf(coords=c("x1_", "y1_"), crs = 5070)
-    indiv_poly <- indiv_sf %>% sf::st_buffer(dist = 10000) %>%
-      sf::st_union() %>%
-      sf::st_convex_hull()
-    cov_stack_cropped <- terra::crop(cov_stack, indiv_poly)
+    mod.fit <- fit_issf(formula = form, data = train, model=TRUE)
     # Apply model to the landscape as a RSF-style raster map:
     mov <- train %>% dplyr::filter(case_ == T) %>% dplyr::select(sl_, log_sl_, cos_ta_)
-    cov_stack_values <- terra::values(cov_stack_cropped, dataframe=TRUE)
+    cov_stack_values <- terra::values(cov_stack, dataframe=TRUE)
     cov_stack_values$sl_ <- median(mov$sl_) # we need these items to predict from the model, so take medians.
     cov_stack_values$log_sl_ <- median(mov$log_sl_)
     cov_stack_values$cos_ta_ <- median(mov$cos_ta_, na.rm = T)
@@ -291,3 +291,15 @@ ncde_4fold <- function (form, dat, cov_stack) {
 }
 
 predict(object=mod.fit$model, newdata=cov_stack_values, type="lp")
+
+
+al_ranks <- list()
+mod_names <- list()
+system.time(for (i in 1:3){
+  al_ranks[[i]] <- ncde_4fold(forms[[i]], al, cov_stack_cropped) %>% as.data.frame()
+  mod_names[[i]] <- paste0(forms[[i]][3])
+  
+  #paste0(i, "/3")
+})
+
+df <- bind_rows(al_ranks) %>% mutate(name = mod_names, .before=V1)
