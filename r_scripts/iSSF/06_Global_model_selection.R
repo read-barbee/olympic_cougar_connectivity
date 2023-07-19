@@ -142,10 +142,6 @@ issf_summary_tab_mods_only <- issf_summary_tab_all_terms %>% distinct(name, .kee
 ##
 ##########################################################################
 
-fit_mod <- function(form, dat){
-  fit <- fit_issf(form, data=dat)
-}
-
 
 forms <- list()
 
@@ -246,7 +242,7 @@ indiv_poly <- indiv_sf %>% sf::st_buffer(dist = 10000) %>%
   sf::st_convex_hull()
 cov_stack_cropped <- terra::crop(cov_stack, indiv_poly)
   
-system.time(tmp <- ncde_4fold(forms[[2]], al, cov_stack_cropped))
+tmp <- ncde_4fold(forms[[5]], al, cov_stack_cropped)
 
 ncde_4fold <- function (form, dat, cov_stack) {
   # Split out the used GPS points and the available points:
@@ -275,9 +271,12 @@ ncde_4fold <- function (form, dat, cov_stack) {
     cov_stack_values$step_id_ = mod.fit$model$model$`strata(step_id_)`[1]
     predictions <- terra::predict(mod.fit$model, newdata = cov_stack_values, type = "lp", allow.new.levels = TRUE)
     
+    #probably don't actually need to exponentiate
+    #predictions_exp <- exp(predictions) / (1+ exp(predictions))
+    
     # Now test how well this map predicts the test locations:
     train_ssf_vals_df <- as.data.frame(as.vector(predictions))
-    train_ssf_vals_df <- within(train_ssf_vals_df, bins <- cut(predictions, quantile(predictions, probs = 0:10/10, na.rm = T), include.lowest = TRUE))
+    train_ssf_vals_df <- within(train_ssf_vals_df, bins <- .bincode(predictions, quantile(predictions, probs = 0:10/10, na.rm = T), include.lowest = TRUE))
     test_steps <- dplyr::filter(test, case_ == T)
     test_steps$step_id_ = mod.fit$model$model$`strata(step_id_)`[1]
     test_ssf_vals <- predict(mod.fit$model, newdata = test_steps,  type = "lp", allow.new.levels = TRUE)
@@ -293,13 +292,71 @@ ncde_4fold <- function (form, dat, cov_stack) {
 predict(object=mod.fit$model, newdata=cov_stack_values, type="lp")
 
 
+#throwing error at index 5 (podens) because the breaks for the top three quantiles are identical. Replacing cut() with .bincode() solves the error but reduces the number of quantile bins. Adding jitter with breaks = breaks + seq_along(breaks) * .Machine$double.eps is an option, but then the bins won't be equal area
+
 al_ranks <- list()
 mod_names <- list()
-system.time(for (i in 1:3){
+for (i in 1:length(forms)){
   al_ranks[[i]] <- ncde_4fold(forms[[i]], al, cov_stack_cropped) %>% as.data.frame()
   mod_names[[i]] <- paste0(forms[[i]][3])
   
-  #paste0(i, "/3")
-})
+  print(paste0(i, "/", length(forms)))
+}
+#); beep("fanfare")
 
-df <- bind_rows(al_ranks) %>% mutate(name = mod_names, .before=V1)
+df <- bind_rows(al_ranks) %>% mutate(name = unlist(mod_names), .before=V1)
+
+#write_csv(df, "al_mod_sel_test_7-18-23.csv")
+
+
+
+
+
+##### Test zone 2 ######
+ncde_4fold <- function (form, dat, cov_stack) {
+  # Split out the used GPS points and the available points:
+  case_t <- dplyr::filter(al, case_ == T)
+  case_f <- dplyr::filter(al, case_ == F) %>% dplyr::mutate(group = NA)
+  # Divide the datasets into 4 folds:
+  n <- ceiling(nrow(case_t)/4)
+  group <- c(replicate(n, sample(1:4, 4, replace = F))) #assign random group numbers to each row of true observations
+  group <- group[c(1:nrow(case_t))]
+  trn.tst <- cbind(case_t, group)
+  trn.tst <- rbind(trn.tst, case_f) %>% dplyr::arrange(t1_) %>% fill(group)
+  
+  # Run the 4-fold CV:
+  cv_mat <- matrix(NA, ncol = 4, nrow = 1)
+  for (i in 1:4) {
+    train <- dplyr::filter(trn.tst, group != i)
+    test <- dplyr::filter(trn.tst, group == i)
+    # Fit the model to the subsetted training dataset:
+    mod.fit <- fit_issf(formula = form, data = train, model=TRUE)
+    # Apply model to the landscape as a RSF-style raster map:
+    mov <- train %>% dplyr::filter(case_ == T) %>% dplyr::select(sl_, log_sl_, cos_ta_)
+    cov_stack_values <- terra::values(cov_stack, dataframe=TRUE)
+    cov_stack_values$sl_ <- median(mov$sl_) # we need these items to predict from the model, so take medians.
+    cov_stack_values$log_sl_ <- median(mov$log_sl_)
+    cov_stack_values$cos_ta_ <- median(mov$cos_ta_, na.rm = T)
+    cov_stack_values$step_id_ = mod.fit$model$model$`strata(step_id_)`[1]
+    predictions <- terra::predict(mod.fit$model, newdata = cov_stack_values, type = "lp", allow.new.levels = TRUE)
+    
+    #probably don't actually need to exponentiate
+    #predictions_exp <- exp(predictions) / (1+ exp(predictions))
+    
+    # Now test how well this map predicts the test locations:
+    train_ssf_vals_df <- as.data.frame(as.vector(predictions))
+    breaks <- quantile(predictions, probs = 0:10/10, na.rm = T)
+    breaks_j <- breaks + (seq_along(breaks) * .Machine$double.eps)
+    train_ssf_vals_df <- within(train_ssf_vals_df, bins <- cut(predictions, breaks_j, include.lowest=TRUE))
+    test_steps <- dplyr::filter(test, case_ == T)
+    test_steps$step_id_ = mod.fit$model$model$`strata(step_id_)`[1]
+    test_ssf_vals <- predict(mod.fit$model, newdata = test_steps,  type = "lp", allow.new.levels = TRUE)
+    test_ssf_vals_df <- as.data.frame(test_ssf_vals)
+    test_ssf_vals_df <- within(test_ssf_vals_df, bins <- cut(test_ssf_vals, breaks_j, include.lowest = TRUE))
+    cor_cv <- cor.test(x = 1:10, y = as.numeric(table(test_ssf_vals_df$bins))/(nrow(test_steps)/10), method = "spearman", exact = FALSE)$estimate
+    cv_mat[i] <- cor_cv
+    cor_cv
+  }
+  return(cv_mat)
+}
+

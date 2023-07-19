@@ -25,6 +25,8 @@ library(beepr)
 
 ## imputation just seems to make confidence intervals wider and estimates worse
 
+#register doParallel backend. Note:the cores argument implies forking with doMC backend, but you can check with the getDoParName() function
+doParallel::registerDoParallel(cores = 9) 
 
 #########################################################################
 ##
@@ -35,10 +37,10 @@ library(beepr)
 #choose whether to use steps without imputation, imputation but no rerouting, or iimputation and rerouting
 
 #no imputation
-#steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
 
 #imputed and rerouted
-steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
+#steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
 
 
 #set all negative elevations to 0 and filter dispersal tracks for post dispersal event
@@ -99,7 +101,7 @@ steps_scaled <- steps %>%
   mutate(across(c(sl_, ta_, gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), scale)) %>% 
   mutate(across(c(sl_, ta_, gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), as.numeric))
 
-plot_histogram(steps_scaled %>% select(sl_, ta_, gpp:power_hii))
+#plot_histogram(steps_scaled %>% select(sl_, ta_, gpp:power_hii))
 
 #plot_boxplot(steps_scaled %>% select(case_, sl_, ta_, gpp:power_hii), by = "case_")
 
@@ -213,38 +215,137 @@ covs <- steps_scaled %>%
   select(case_, animal_id, step_id_, gpp:calving_season_yes) %>% 
   select(-c(sex:disp_qual))
 
-#function to fit a univariate Muff model with random effect for individual for each covariate
 
-uni_fit <- function(cov){
-  form <- as.formula(paste0("case_ ~ ", 
+#Muff uni fits in a for loop
+
+cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
+
+#parallelized for loop failing for some reason
+# system.time(uni_fits <- foreach (i = 1:length(cov_names), .packages=c("glmmTMB"))%dopar%{
+# 
+#   cov <- cov_names[i]
+# 
+#   form <- as.formula(paste0("case_ ~ ", " -1 + ", #remove standard intercept to be replace with stratum-based intercept
+#                        #fixed effects
+#                        cov, "+",
+#                        #random intercept (strata)
+#                        "(1|step_id_) +",
+#                        #random slopes
+#                        "(0 +", cov, "| animal_id )"))
+# 
+# 
+#   uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
+# 
+#   uni_mod$parameters$theta[1] <-log(1e3)
+#   uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
+#   glmmTMB::fitTMB(uni_mod)
+# 
+# }); beep("fanfare")
+
+#unparallelized for loop (takes ~ 31 min)
+uni_fits <- list()
+system.time(for (i in 1:length(cov_names)){
+  
+  cov <- cov_names[i]
+  
+  form <- as.formula(paste0("case_ ~ ", " -1 + ", #remove standard intercept to be replace with stratum-based intercept
                             #fixed effects
-                            cov, "+", 
+                            cov, "+",
                             #random intercept (strata)
                             "(1|step_id_) +",
                             #random slopes
                             "(0 +", cov, "| animal_id )"))
   
+  
   uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
+  
   uni_mod$parameters$theta[1] <-log(1e3)
   uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
-  fit <- glmmTMB::fitTMB(uni_mod)
+  uni_fits[[i]] <- glmmTMB::fitTMB(uni_mod)
   
-  return(fit)
+}); beep("fanfare")
+
+names(uni_fits) <- cov_names
+
+#remove categorical covariates for fitting quadratic models
+covs_num <- covs %>% select(-c(land_cover_usfs_lumped_barren:calving_season_yes))
+
+#generate separate name list for continuous covariates for quadratic iteration
+cov_names_num <- names(covs_num)[4:length(names(covs_num))]
+
+#repeat for quadratic models
+uni_fits_quad <- list()
+system.time(for (i in 1:length(cov_names_num)){
+  
+  cov <- cov_names_num[i]
+  
+  form <- as.formula(paste0("case_ ~ ", " -1 + ", #remove standard intercept to be replace with stratum-based intercept
+                            #fixed effects
+                            cov, "+", "I(", cov,  "^2) + ",
+                            #random intercept (strata)
+                            "(1|step_id_) +",
+                            #random slopes
+                            "(0 +", cov, "| animal_id ) + ", 
+                            "(0 +", "I(", cov,  "^2)", "| animal_id )"))
+  
+  
+  uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
+  
+  uni_mod$parameters$theta[1] <-log(1e3)
+  uni_mod$mapArg <-list(theta=factor(c(NA, 1:2)))
+  uni_fits_quad[[i]] <- glmmTMB::fitTMB(uni_mod)
+  
+}); beep("fanfare")
+
+names(uni_fits_quad) <- cov_names_num
+
+#rename qudaratic covariates with "2" at the end
+new_names <- vector()
+for(i in 1:length(cov_names)){
+  old_name <- cov_names[i]
+  new_names[i] <- paste0(old_name, "2")
 }
 
-#control = glmmTMBControl(parallel = 9), in glmmTMB doesn't appear to be supported in mac
+names(uni_fits_quad) <- new_names
 
-#test <- uni_fit("gpp")
+uni_fits_quad2 <- uni_fits_quad[1:22]
 
+#combine linear and quadratic fits
+uni_fits_all <- c(uni_fits, uni_fits_quad2)
+
+
+
+
+###### MAPPING FRAMEWORK ##### seems slower; won't work in parallel
 # library(furrr)
 # plan(multisession, workers = 8)
 
-cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
+#function to fit a univariate Muff model with random effect for individual for each covariate
+
+# uni_fit <- function(cov){
+#   form <- as.formula(paste0("case_ ~ ", 
+#                             #fixed effects
+#                             cov, "+", 
+#                             #random intercept (strata)
+#                             "(1|step_id_) +",
+#                             #random slopes
+#                             "(0 +", cov, "| animal_id )"))
+#   
+#   uni_mod <- glmmTMB(form, family =poisson, data = covs, doFit = FALSE)
+#   uni_mod$parameters$theta[1] <-log(1e3)
+#   uni_mod$mapArg <-list(theta=factor(c(NA, 1)))
+#   fit <- glmmTMB::fitTMB(uni_mod)
+#   
+#   return(fit)
+# }
+
+
+#cov_names <- covs %>% select(-c(case_:step_id_)) %>% names()
 
 #map the function across all covariates. Too big for future_map(). ~ 47 min
-system.time(uni_fits <- map(cov_names, uni_fit, .progress=TRUE)); beep("fanfare")
+#system.time(uni_fits <- map(cov_names, uni_fit, .progress=TRUE)); beep("fanfare")
 
-names(uni_fits) <- cov_names
+#names(uni_fits) <- cov_names
 
 #save model fits--huge file and takes forever. Probably not worth it.
 #save(uni_fits, file = "fitted_models/muff_uni_fits_imp_7-13-23.RData")
@@ -259,18 +360,21 @@ names(uni_fits) <- cov_names
 #uni_fits2 <- uni_fits[3:length(uni_fits)]
 
 ### Create model summary table of coefficient estimates and AIC/BIC values
+
+mod_names_all <- names(uni_fits_all)
+
 test_summ <- list()
 
-for (i in 1:length(uni_fits)){
-  name <- cov_names[[i]]
-  aic<- broom.mixed::glance(uni_fits[[i]])$AIC
-  bic <- broom.mixed::glance(uni_fits[[i]])$BIC
-  ll <- broom.mixed::glance(uni_fits[[i]])$logLik
+for (i in 1:length(uni_fits_all)){
+  name <- mod_names_all[i]
+  aic<- broom.mixed::glance(uni_fits_all[[i]])$AIC
+  bic <- broom.mixed::glance(uni_fits_all[[i]])$BIC
+  ll <- broom.mixed::glance(uni_fits_all[[i]])$logLik
   
-  test_summ[[i]] <- broom.mixed::tidy(uni_fits[[i]]) %>% 
+  test_summ[[i]] <- broom.mixed::tidy(uni_fits_all[[i]]) %>% 
     filter(effect=="fixed" & !(term %in% c("(Intercept)", "sd__(Intercept)"))) %>% 
     #summarize(mean = mean(estimate), se = plotrix::std.error(estimate)) %>% 
-    select(estimate:p.value) %>% 
+    select(term:p.value) %>% 
     mutate(AIC = aic,
            BIC = bic,
            LogLik = ll,
@@ -280,7 +384,10 @@ for (i in 1:length(uni_fits)){
 
 muff_mod_summ <- bind_rows(test_summ)# %>% filter(!grepl("usfs", name))
 
-#write_csv(muff_mod_summ, "feature_selection/uni_muff_summary_no_imp_7-13-23.csv")
+#remove redundant linear terms from quadratic models
+muff_mod_summ_filt <- muff_mod_summ %>% filter(str_detect(term, "I") ==TRUE | str_detect(name, "2")==FALSE)
+
+#write_csv(muff_mod_summ_filt, "feature_selection/uni_muff_summary_quad_imp_7-18-23.csv")
 
 # TPI, roads, popdens, rails, and power didn’t converge (no AIC or loglik vals)
 
@@ -299,58 +406,75 @@ sjPlot::plot_model(uni_fits$evi, type="re",
 ##
 ##########################################################################
 
+#select necessary fields
 covs2 <- steps_scaled %>% 
   select(case_, step_id_, gpp:calving_season)
 
-#function to fit a univariate issf model for each covariate
-uni_fit_issf <- function(cov){
-  uni_mod <- fit_issf(data=covs2, case_ ~ cov + strata(step_id_))
-  return(uni_mod)
-}
+#remove case_ and sl_ from the list of covariates to iterate over
+cov_names <- names(covs2)[3:length(names(covs2))]
 
 #remove categorical covariates for fitting quadratic models
 covs_num <- covs2 %>% select(-c(land_cover_usfs, land_cover_usfs_lumped, land_use_usfs, land_use_usfs_lumped, season:calving_season))
 
-#fit quadratic models for eaach covaraiteto see how they compare
-uni_fit_issf_quad <- function(cov){
-  uni_mod <- fit_issf(data=covs_num, case_ ~ cov + I(cov^2) + strata(step_id_))
-  return(uni_mod)
-}
+#generate separate name list for continuous covariates for quadratic iteration
+cov_names_num <- names(covs_num)[3:length(names(covs_num))]
 
-#map linear function across all covariates
-uni_fits_issf <- map(covs2, uni_fit_issf)
+#fit regular univariate models for each covariate ~ 5 minutes with 9 cores
+system.time(uni_fits_issf <- foreach(i=1:length(cov_names), .packages=c("amt"), .verbose=TRUE)%dopar%{
+  uni_fits_issf <- list()
+  cov <- cov_names[i]
 
-#map quadratic function across all covariates
-uni_fits_issf_q <- map(covs_num, uni_fit_issf_quad)
+    form <- as.formula(paste0("case_ ~ ",
+                         #fixed effects
+                         cov, "+",
+                         #random intercept (strata)
+                         "strata(step_id_)"))
 
-#Remove case_and step_length columns after fitting models
-uni_fits_issf_q2 <- uni_fits_issf_q[3:length(uni_fits_issf_q)]
+
+    uni_fits_issf[[i]] <- fit_issf(data=covs2, formula = form)
+})
+
+names(uni_fits_issf) <- cov_names
+
+#fit quadratic models for each continuous covariate~ 5 minutes with 9 cores
+system.time(uni_fits_issf_q <- foreach(i=1:length(cov_names_num), .packages=c("amt"), .verbose=TRUE)%dopar%{ 
+  uni_fits_issf_q <- list()
+  cov <- cov_names_num[i]
+  
+  form <- as.formula(paste0("case_ ~ ",
+                            #fixed effects
+                            cov, " + ", "I(", cov,  "^2) + ",
+                            #random intercept (strata)
+                            "strata(step_id_)"))
+  
+  
+  uni_fits_issf_q[[i]] <- fit_issf(data=covs_num, formula = form)
+  
+}); beep("fanfare")
+
 
 #rename qudaratic covariates with "2" at the end
 new_names <- vector()
-for(i in 1:length(uni_fits_issf_q2)){
-  old_name <- names(uni_fits_issf_q2)[i]
+for(i in 1:length(cov_names_num)){
+  old_name <- cov_names_num[i]
   new_names[i] <- paste0(old_name, "2")
 }
 
-names(uni_fits_issf_q2) <- new_names
+names(uni_fits_issf_q) <- new_names
 
 #combine linear and quadratic fits
-uni_fits_issf_all <- c(uni_fits_issf, uni_fits_issf_q2)
-
-#remove case_ and sl_ terms
-uni_fits_issf2 <- uni_fits_issf_all[3:length(uni_fits_issf_all)]
+uni_fits_issf_all <- c(uni_fits_issf, uni_fits_issf_q)
 
 #create model summary table of coefficient estimates and AIC/BIC values
 tidy_list <- list()
 mod_summ_issf <- list()
 
-for (i in 1:length(uni_fits_issf2)){
-  Name <- names(uni_fits_issf2)[[i]]
-  tidy_list[[i]] <- broom::tidy(uni_fits_issf2[[i]]$model) %>% 
+for (i in 1:length(uni_fits_issf_all)){
+  Name <- names(uni_fits_issf_all)[[i]]
+  tidy_list[[i]] <- broom::tidy(uni_fits_issf_all[[i]]$model) %>% 
     mutate(name = Name, .before=term)
   
-  mod_summ_issf[[i]] <- broom::glance(uni_fits_issf2[[i]]$model) %>% 
+  mod_summ_issf[[i]] <- broom::glance(uni_fits_issf_all[[i]]$model) %>% 
     select(r.squared:BIC, statistic.wald, p.value.wald) %>% 
     mutate(name = Name, .before=r.squared)
 }
@@ -358,13 +482,13 @@ for (i in 1:length(uni_fits_issf2)){
 tidy_list <- bind_rows(tidy_list) 
 mod_summ_issf <- bind_rows(mod_summ_issf)
 
-issf_summary_tab <- tidy_list %>% left_join(mod_summ_issf, by= join_by(name)) %>% 
-  mutate(name= case_when(term!="cov" ~ paste0(name, "_", term), .default = name)) %>% select(-term)
+issf_summary_tab <- tidy_list %>% left_join(mod_summ_issf, by= join_by(name))
+  # %>% mutate(name= case_when(term!="cov" ~ paste0(name, "_", term), .default = name)) %>% select(-term)
 
 #remove redundant linear terms from quadratic models
-issf_summary_tab_filt <- issf_summary_tab %>% filter(str_detect(name, "2_") ==TRUE | str_detect(name, "2")==FALSE)
+issf_summary_tab_filt <- issf_summary_tab %>% filter(str_detect(term, "I") ==TRUE | str_detect(name, "2")==FALSE)
 
-#write_csv(issf_summary_tab_filt, "feature_selection/uni_issf_summary_quad_no_imp_7-17-23.csv")
+#write_csv(issf_summary_tab_filt, "feature_selection/uni_issf_summary_quad_imp_7-18-23.csv")
 
 
 #########################################################################
@@ -464,6 +588,28 @@ partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = calving_se
 
 ################################ GRAVEYARD #################################
 
+#mapping workflow for uni_issf fits. slower than foreach
+# #function to fit a univariate issf model for each covariate
+# uni_fit_issf <- function(cov){
+#   uni_mod <- fit_issf(data=covs2, case_ ~ cov + strata(step_id_))
+#   return(uni_mod)
+# }
+
+#fit quadratic models for eaach covaraiteto see how they compare
+# uni_fit_issf_quad <- function(cov){
+#   uni_mod <- fit_issf(data=covs_num, case_ ~ cov + I(cov^2) + strata(step_id_))
+#   return(uni_mod)
+# }
+
+# #map linear function across all covariates
+# system.time(uni_fits_issf <- map(covs2, uni_fit_issf, .progress=TRUE))
+# 
+# #map quadratic function across all covariates
+# uni_fits_issf_q <- map(covs_num, uni_fit_issf_quad, .progress=TRUE)
+# 
+
+
+
 # Muff uni fits in a for loop
 #initialize clusters for parallel computing. parallel doesn't seem to work though
 # n.clusters = 8
@@ -494,4 +640,10 @@ partialPlot(rf_combined, pred.data = as.data.frame(training), x.var = calving_se
 #   uni_fits[[i]] <- glmmTMB::fitTMB(uni_mod)
 #   
 # }); beep("fanfare")
+
+# library(furrr)
+# 
+# plan(multisession, workers = 9)
+# 
+# options(future.globals.maxSize = +Inf)
 # 
