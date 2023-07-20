@@ -301,17 +301,17 @@ names(uni_fits_quad) <- cov_names_num
 
 #rename qudaratic covariates with "2" at the end
 new_names <- vector()
-for(i in 1:length(cov_names)){
+for(i in 1:length(cov_names_num)){
   old_name <- cov_names[i]
   new_names[i] <- paste0(old_name, "2")
 }
 
 names(uni_fits_quad) <- new_names
 
-uni_fits_quad2 <- uni_fits_quad[1:22]
+#uni_fits_quad2 <- uni_fits_quad[1:22]
 
 #combine linear and quadratic fits
-uni_fits_all <- c(uni_fits, uni_fits_quad2)
+uni_fits_all <- c(uni_fits, uni_fits_quad)
 
 
 
@@ -387,7 +387,7 @@ muff_mod_summ <- bind_rows(test_summ)# %>% filter(!grepl("usfs", name))
 #remove redundant linear terms from quadratic models
 muff_mod_summ_filt <- muff_mod_summ %>% filter(str_detect(term, "I") ==TRUE | str_detect(name, "2")==FALSE)
 
-#write_csv(muff_mod_summ_filt, "feature_selection/uni_muff_summary_quad_imp_7-18-23.csv")
+#write_csv(muff_mod_summ, "feature_selection/uni_muff_summary_quad_all_terms_no_imp_7-18-23.csv")
 
 # TPI, roads, popdens, rails, and power didn’t converge (no AIC or loglik vals)
 

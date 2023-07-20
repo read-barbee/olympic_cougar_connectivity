@@ -147,7 +147,7 @@ forms <- list()
 
 for (i in 1:length(all_comb)){
   var_i <- all_comb[[i]]
-  forms[[i]] <- as.formula(paste(response, paste(paste(var_i, collapse="+"), " strata(step_id_)", sep="+"), sep="~"))
+  forms[[i]] <- as.formula(paste(response, paste(paste(var_i, collapse="+"), "sl_ + log_sl_ + cos_ta_  + strata(step_id_)", sep="+"), sep="~"))
 }
 
 
@@ -296,7 +296,7 @@ predict(object=mod.fit$model, newdata=cov_stack_values, type="lp")
 
 al_ranks <- list()
 mod_names <- list()
-for (i in 1:length(forms)){
+for (i in 1:3){ #length(forms)
   al_ranks[[i]] <- ncde_4fold(forms[[i]], al, cov_stack_cropped) %>% as.data.frame()
   mod_names[[i]] <- paste0(forms[[i]][3])
   
@@ -339,10 +339,6 @@ ncde_4fold <- function (form, dat, cov_stack) {
     cov_stack_values$cos_ta_ <- median(mov$cos_ta_, na.rm = T)
     cov_stack_values$step_id_ = mod.fit$model$model$`strata(step_id_)`[1]
     predictions <- terra::predict(mod.fit$model, newdata = cov_stack_values, type = "lp", allow.new.levels = TRUE)
-    
-    #probably don't actually need to exponentiate
-    #predictions_exp <- exp(predictions) / (1+ exp(predictions))
-    
     # Now test how well this map predicts the test locations:
     train_ssf_vals_df <- as.data.frame(as.vector(predictions))
     breaks <- quantile(predictions, probs = 0:10/10, na.rm = T)
