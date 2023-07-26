@@ -553,7 +553,7 @@ steps_final <- steps_unscaled %>%
 #   mutate(across(elev_start:landuse_hii_end, as.numeric))
 
 
-write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
+#write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
 
 
 

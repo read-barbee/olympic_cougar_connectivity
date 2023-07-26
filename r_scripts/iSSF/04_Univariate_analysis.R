@@ -37,10 +37,10 @@ doParallel::registerDoParallel(cores = 9)
 #choose whether to use steps without imputation, imputation but no rerouting, or iimputation and rerouting
 
 #no imputation
-steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
+#steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
 
 #imputed and rerouted
-#steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
 
 
 #set all negative elevations to 0 and filter dispersal tracks for post dispersal event
@@ -134,7 +134,7 @@ cor_matrix <- cor(dummy)
 
 threshold <- 0.5
 
-high_cor_pairs <- which(cor_matrix > threshold, arr.ind = TRUE)
+high_cor_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
 high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
 
 var1 <- vector()
@@ -153,7 +153,7 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
   #filter(corr < 0.977) %>% 
   arrange(desc(corr))
 
-#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_t5_no_imp_7-17-23.csv")
+#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_t5_imp_7-26-23.csv")
 
 #the GGAlly package corrplot is more informative for numeric variables
 ggcorr(steps_scaled %>% 
