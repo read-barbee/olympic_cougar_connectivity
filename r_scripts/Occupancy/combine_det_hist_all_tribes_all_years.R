@@ -85,6 +85,17 @@ pnptc_2022 <- read_csv("data/Camera_Data/2022/PNPTC_2022/pnptc_2022_det_hist.csv
   unite( "station_id", c(grid_id, station, year), sep = "_", remove = FALSE) %>% 
   select(station_id, grid_id, station, year, lon, lat, cell_id, everything())
 
+
+
+quin_res_2022 <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist.csv") %>% 
+  rename(station = station_id,
+         lat = latitude,
+         lon = longitude) %>%
+  unite( "station_id", c(grid_id, station, year), sep = "_", remove = FALSE) %>% 
+  select(-c(camera_id, cameras)) %>% 
+  select(station_id, grid_id, station, year, lon, lat, cell_id, everything())
+
+
 data_list <- list(lekt_2019, 
                lekt_2020, 
                pnptc_2020, 
@@ -92,7 +103,8 @@ data_list <- list(lekt_2019,
                pnptc_2021, 
                makah_2021, 
                skok_2021, 
-               pnptc_2022)
+               pnptc_2022,
+               quin_res_2022)
 
 
 #########################################################################

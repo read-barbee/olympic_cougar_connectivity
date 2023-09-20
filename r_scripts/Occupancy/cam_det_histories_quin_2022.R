@@ -2,7 +2,7 @@
 
 # Author: Read Barbee
 
-# Date:2023-09-12
+# Date:2023-09-19
 
 # Purpose:
 
@@ -25,10 +25,10 @@ library(janitor)
 #these two functions merge activity histories for cameras within the same 30x30mm raster pixel
 merge_rows <- function(row1, row2){
   if(row1$cell_id==row2$cell_id){
-    row_new <- row1[1:5]
-    row_new$cameras <- paste0(row1$cameras, "_", row2$cameras)
-    hist1 <- row1[6:length(row1)]
-    hist2 <- row2[6:length(row2)]
+    row_new <- row1[1:6]
+    row_new$CameraID <- paste0(row1$CameraID, "_", row2$CameraID)
+    hist1 <- row1[7:length(row1)]
+    hist2 <- row2[7:length(row2)]
     hist_merge <- vector()
     for(i in 1:length(hist1)){
       if(is.na(hist1[i])==T & is.na(hist2[i])==F){
@@ -43,7 +43,7 @@ merge_rows <- function(row1, row2){
       }
     }
     hist_merge <- unlist(hist_merge)
-    hist_merge <- tibble(date = names(row1[6:length(row1)]), value = hist_merge) %>% pivot_wider(names_from = date, values_from = value)
+    hist_merge <- tibble(date = names(row1[7:length(row1)]), value = hist_merge) %>% pivot_wider(names_from = date, values_from = value)
     row_new <- bind_cols(row_new, hist_merge) 
   }
   
@@ -62,14 +62,14 @@ station_level <- function(rows) {
   if (nrow(rows) == 1) {
     return(rows[1, ])
   }
-  
+  else{
   new_row <- rows[1, ]
   for (i in 2:nrow(rows)) {
     new_row <- merge_rows(new_row, rows[i, ])
   }
   
   return(new_row)
-}
+}}
 
 
 #Function to merge images containing cougars that are fewer than 15 min apart
@@ -103,7 +103,8 @@ cam_act <-read_csv("data/Camera_Data/2022/Quin_Res_2022/OlympicQuin_2022_Activit
   select(-c(Study, `General Location`, `Viewshed Area`, Elevation)) %>% 
   rename(longitude = Longitude,
          latitude = Latitude,
-         station_id=Station)
+         station_id=Station,
+         cameras = Cameras)
 
 #species detections
 cougar_det <- read_csv("data/Camera_Data/2022/Quin_Res_2022/OlympicQuin_2022_SpeciesDetections_FINAL.csv", col_types = cols(datetime = col_character())) %>% 
@@ -112,12 +113,12 @@ cougar_det <- read_csv("data/Camera_Data/2022/Quin_Res_2022/OlympicQuin_2022_Spe
          station_id = station) %>% 
   #filter(is.na(station_id) == F ) %>% 
   mutate(date_time = timestamp) %>% 
-  separate_wider_delim(cols = date_time, delim = " ", names = c("date", "time"), too_few="debug") %>% View()
-  mutate(timestamp = ymd_hms(timestamp),
-         date = ymd(date),
-         time = hms(time)) %>%
-  select(station_id, camera_id, x, y, date, time, timestamp, species) %>% 
-  filter(species=="Puma")
+  separate_wider_delim(cols = date_time, delim = " ", names = c("date", "time")) %>% 
+  mutate(timestamp = mdy_hm(timestamp),
+         date = mdy(date),
+         time = hm(time)) %>%
+  #select(station_id, camera_id, date, time, timestamp, species) %>% 
+  filter(species=="Cougar")
 
 #########################################################################
 ##
@@ -159,7 +160,7 @@ station_names <- cam_act %>% distinct(station_id) %>% pull()
 #Execute aggregation function for each station
 stations <- list()
 for(i in 1:length(station_names)){
-  rows <- cam_act %>% filter(station_id == station_names[i]) %>% arrange(cameras)
+  rows <- cam_act %>% filter(station_id == station_names[i]) %>% arrange(CameraID)
   stations[[i]] <- station_level(rows)
   
   print(i)
@@ -223,25 +224,25 @@ det_hist_full <- stations_long %>%
 det_hist_binary <- det_hist_full %>% 
   select(-c(cougar_detections_count, effort, cam_status)) %>% 
   pivot_wider(names_from = date, values_from = cougar_detections_binary) %>% 
-  mutate(grid_id = "LEKT",
-         year = "2021", .before=station_id)
+  mutate(grid_id = "QUIN_RES",
+         year = "2022", .before=station_id)
 
 
 det_hist_counts <- det_hist_full %>% 
   select(-c(cougar_detections_binary, effort, cam_status)) %>% 
   pivot_wider(names_from = date, values_from = cougar_detections_count) %>% 
-  mutate(grid_id = "LEKT",
-         year = "2021", .before=station_id)
+  mutate(grid_id = "QUIN_RES",
+         year = "2022", .before=station_id)
 
 effort_matrix <- det_hist_full %>% 
   select(-c(cougar_detections_binary, cougar_detections_count, cam_status)) %>% 
   pivot_wider(names_from = date, values_from = effort) %>% 
-  mutate(grid_id = "LEKT",
-         year = "2021", .before=station_id)
+  mutate(grid_id = "QUIN_RES",
+         year = "2022", .before=station_id)
 
 
 
 
-# write_csv(det_hist_binary, "data/Camera_Data/2021/LEKT_2021/lekt_2021_det_hist.csv")
-# write_csv(det_hist_counts, "data/Camera_Data/2021/LEKT_2021/lekt_2021_det_hist_counts.csv")
-# write_csv(det_hist_full, "data/Camera_Data/2021/LEKT_2021/lekt_2021_det_hist_long.csv")
+# write_csv(det_hist_binary, "data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist.csv")
+# write_csv(det_hist_counts, "data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist_counts.csv")
+# write_csv(det_hist_full, "data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist_long.csv")
