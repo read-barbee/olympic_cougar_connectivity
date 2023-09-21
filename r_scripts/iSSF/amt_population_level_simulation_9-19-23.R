@@ -136,10 +136,12 @@ start <- make_start(x= c(-2114054, 3007263),
                     crs = 5070)
 
 
-
-cov_stack2_rast <- raster::stack(cov_stack2)
-
 k1 <- amt::redistribution_kernel(mod, map = cov_stack2, start = start)
+
+s1 <- simulate_path(k1, n.steps = 1000)
+
+terra::plot(cov_stack2$tree_cover_hansen)
+lines(s1$x_, s1$y_, col = "red")
 
 # 
 # k1 <- redistribution_kernel(mod, map = cov_stack, start = start,
@@ -172,3 +174,5 @@ k1 <- amt::redistribution_kernel(mod, map = cov_stack2, start = start)
 
 # cov_stack2$sl <- 1
 # cov_stack2$ta <- 0
+
+#cov_stack2_rast <- raster::stack(cov_stack2)
