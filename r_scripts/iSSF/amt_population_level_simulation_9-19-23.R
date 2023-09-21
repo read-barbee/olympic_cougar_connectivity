@@ -28,6 +28,8 @@ top_mod <- readRDS("muff_top_global_fit_res_9-19-23.rds")
 #no imputation
 steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv") 
 
+#locs <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-11-2023.csv")
+
 #%>% mutate(ndvi = ndvi*0.0001)
 
 #set all negative elevations to 0 and filter dispersal tracks for post dispersal event
@@ -71,6 +73,10 @@ names(cov_stack) <- c("tree_cover_hansen",
                       "evi",
                       "dist_water")
 
+cov_stack$northing <- cos((pi*cov_stack$aspect)/180)
+cov_stack$easting <- sin((pi*cov_stack$aspect)/180)
+cov_stack$station_id = as.factor("LEKT_Station1")
+
 
 ########################################################################
 ##
@@ -95,28 +101,45 @@ for(i in 1:nrow(top_estimates)){
   coefs[i] <- top_estimates$Estimate[i]
   names[i] <- top_estimates$term[i] %>% 
     str_replace(coll("^2)"), "2") %>% 
-    str_remove(coll("I("))
+    str_remove(coll("I(")) %>% 
+    str_c("_end")
 }
+
+
 
 names(coefs) <- names
 
+#linear terms only
+coefs_linear <- coefs[str_detect(names, "2", negate = TRUE)] 
 
-mod <- make_issf_model(coefs = coefs,
-                       sl = make_gamma_distr(shape = 1, scale = 1, vcov = NULL),
-                       ta =make_vonmises_distr(kappa = 1, vcov = NULL))
+# cov_stack2 <- cov_stack[[names(cov_stack) %in% names(coefs_linear)]]
+# coefs_linear <- coefs_linear[names(cov_stack2)]
 
+cov_stack2 <- terra::aggregate(cov_stack, fact=10, cores=5)
+
+
+
+#plot constructred gamma distribution
+x <- seq(0.1, 10, 0.1)
+plot(x, dgamma(x, shape = 2, scale = 2), type = "l")
+
+
+mod <- make_issf_model(coefs = c(coefs_linear, sl_ = median(steps$sl_, na.rm=T), ta_ = median(steps$ta_, na.rm=T)),
+                       sl = fit_distr(steps$sl_, "gamma", na.rm = TRUE),
+                       ta =fit_distr(steps$ta_, "vonmises", na.rm = TRUE))
 
 
 start <- make_start(x= c(-2114054, 3007263),
-                    time = ymd_hms("2022-04-05 05:00:35"),
+                    #time = ymd_hms("2022-04-05 05:00:35"),
                     ta = 0,
                     dt = hours(2),
                     crs = 5070)
 
 
-#stops working here. RESUME HERE ########
 
-k1 <- redistribution_kernel(mod, map = cov_stack, start = start)
+cov_stack2_rast <- raster::stack(cov_stack2)
+
+k1 <- amt::redistribution_kernel(mod, map = cov_stack2, start = start)
 
 # 
 # k1 <- redistribution_kernel(mod, map = cov_stack, start = start,
@@ -126,6 +149,26 @@ k1 <- redistribution_kernel(mod, map = cov_stack, start = start)
 
 
 
+################################ Graveyard #################################
+#cov_stack$roads_hii2 <- (cov_stack$roads_hii^2)
 
 
+#reordering doesn't seem to make a difference
+#na.omit doesn't help
+#converting to raster stack doesn't help
 
+#cov_stack3 <- na.omit(cov_stack2)
+
+#check to make sure point is within raster area--it is
+#terra::plot(cov_stack2[[1]])
+#terra::points(terra::vect("POINT (-2114054 3007263)", crs="+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs"))
+#reducing cov_stack_resolution doesn't work either
+
+# mod <- make_issf_model(coefs = c(coefs_linear, sl_ = median(steps$sl_), ta_ = median(steps$ta_), strata = steps$step_id_),
+#                        sl = make_gamma_distr(shape = 2, scale = 2, vcov = NULL),
+#                        ta =make_vonmises_distr(kappa = 4, vcov = NULL))
+
+#cov_stack2_scaled <- terra::scale(cov_stack2)
+
+# cov_stack2$sl <- 1
+# cov_stack2$ta <- 0
