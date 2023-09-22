@@ -14,6 +14,7 @@ library(amt)
 #library(MuMIn)
 #library(INLA)
 library(beepr)
+library(buildmer)
 
 #########################################################################
 ##
@@ -154,25 +155,24 @@ run_global_quad <- function (dat){
 #Fit takes ~ 22 min with 15 linear terms and 10 quadratic terms; no random slopes on quads
 system.time(global_fit_quad <- run_global_quad(steps_scaled))
 
-# saveRDS(global_fit_quad, "muff_global_fit_quad_res_9-19-23.rds")
+#saveRDS(global_fit_quad, "muff_global_fit_quad_res_9-19-23.rds")
 
-#global_fit_quad <- readRDS("muff_global_fit_quad_res_9-19-23.rds")
+global_fit_quad <- readRDS("muff_global_fit_quad_res_9-19-23.rds")
 
 
 #significant quadratic terms: ndvi, perc_tree_cover.
 
 #including quadratic terms improves AIC
 
+
 #########################################################################
 ##
-## 2. Remove non-significant quadratic terms
+## 2. Remove non-significant quadratic terms 
 ##
 ##########################################################################
 quad_terms2 <- c("I(roads_hii^2)",
                  "I(ndvi^2)",
-                 "I(perc_tree_cover^2)",
-                 "I(npp^2)",
-                 "I(tree_cover_hansen^2)")
+                 "I(perc_tree_cover^2)")
 
 # rand_terms_quad2 <- c("(0 + I(ndvi^2)|animal_id",
 #                       "(0 + I(perc_tree_cover^2) | animal_id")
@@ -190,36 +190,109 @@ mod <- glmmTMB(form, family =poisson, data = steps_scaled, doFit = FALSE)
 
 mod$parameters$theta[1] <-log(1e3)
 mod$mapArg <-list(theta=factor(c(NA, 1:length(rand_terms))))
-global_fit_quad2 <- glmmTMB::fitTMB(mod)
+system.time(global_fit_quad2 <- glmmTMB::fitTMB(mod))
+
+#saveRDS(global_fit_quad2, "muff_global_fit_quad2_res_9-19-23.rds")
+
+#global_fit_quad2 <- readRDS("muff_global_fit_quad2_res_9-19-23.rds")
 
 
 
 #########################################################################
 ##
-## 2. Remove non-significant quadraticterms (round 2)
+## 3. Automated stepwise (buildmer)
 ##
 ##########################################################################
-quad_terms3 <- c("I(roads_hii^2)",
-                 "I(ndvi^2)",
-                 "I(perc_tree_cover^2)")
 
-# rand_terms_quad2 <- c("(0 + I(ndvi^2)|animal_id",
-#                       "(0 + I(perc_tree_cover^2) | animal_id")
+form <- global_fit_quad2$modelInfo$allForm$formula
 
-form <- as.formula(paste0("case_ ~ -1 + ", #remove standard intercept to be replace with stratum-based intercept
-                          #fixed effects
-                          paste(c(params, quad_terms3), collapse = " + "),
-                          #random intercept (strata)
-                          " + (1|step_id_) +",
-                          #random slopes
-                          paste(c(rand_terms), collapse = " + ")))
+test <- buildmer(f = form, data = steps_scaled, buildmerControl = )
+
+
+
+
+
+
+
+
+#########################################################################
+##
+## 3. Manual_backward_stepwise
+##
+##########################################################################
+
+#find term with highest p-value to remove
+start_mod <- summary(stepwise4)
+tab <- start_mod$coefficients$cond %>% 
+  as.data.frame() %>% 
+  #filter(`Pr(>|z|)` > 0.05) %>% 
+  arrange(desc(`Pr(>|z|)`))
+
+tab2 <- start_mod$coefficients$cond %>% 
+  as.data.frame() %>% 
+  #filter(`Pr(>|z|)` > 0.05) %>% 
+  arrange(abs(Estimate))
+
+
+form <- as.formula(case_ ~ -1 + 
+                     roads_hii +  I(roads_hii^2) +
+                     popdens_hii + 
+                     #landuse_hii + 
+                     infra_hii +  
+                     #rails_hii + 
+                     #power_hii + 
+                     tpi + 
+                     npp + 
+                     perc_tree_cover + I(perc_tree_cover^2) + 
+                     ndvi +  I(ndvi^2) +
+                     tree_cover_hansen + 
+                     northing + 
+                     easting + 
+                     tri + 
+                     precip  +  
+                    (1 | step_id_) + 
+                     (0 +  roads_hii | animal_id) + 
+                     (0 + popdens_hii | animal_id) +  
+                     #(0 + landuse_hii | animal_id) + 
+                     (0 + infra_hii | animal_id) +  
+                     #(0 + rails_hii | animal_id) + 
+                     #(0 + power_hii | animal_id) +  
+                     (0 + tpi | animal_id) + 
+                     (0 + npp | animal_id) + 
+                     (0 + perc_tree_cover | animal_id) + 
+                     (0 + ndvi | animal_id) + 
+                     (0 + tree_cover_hansen | animal_id) + 
+                     (0 + northing | animal_id) + 
+                     (0 + easting | animal_id) + 
+                     (0 + tri | animal_id) + 
+                     (0 + precip | animal_id))
 
 
 mod <- glmmTMB(form, family =poisson, data = steps_scaled, doFit = FALSE)
 
 mod$parameters$theta[1] <-log(1e3)
-mod$mapArg <-list(theta=factor(c(NA, 1:length(rand_terms))))
-global_fit_quad3 <- glmmTMB::fitTMB(mod)
+mod$mapArg <-list(theta=factor(c(NA, 1:12)))
+system.time(stepwise4 <- glmmTMB::fitTMB(mod))
+
+AIC(stepwise3) < AIC(stepwise4)
+
+#top: stepwise4: AIC 274869
+
+#saveRDS(stepwise4, "muff_top_global_fit_res_9-19-23.rds")
+
+#top_mod <- readRDS("muff_top_global_fit_res_9-19-23.rds")
+
+#removing landuse makes it worse
+
+
+
+
+
+
+
+
+
+
 
 
 

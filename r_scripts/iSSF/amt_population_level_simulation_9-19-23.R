@@ -14,6 +14,8 @@ library(amt)
 #library(MuMIn)
 #library(INLA)
 library(beepr)
+library(sf)
+library(terra)
 
 
 #import top model fit
@@ -148,8 +150,39 @@ lines(s1$x_, s1$y_, col = "red")
 #                             landscape = "continuous", tolerance.outside = 0.2, 
 #                             n.control = 1e4)
 
+bbox <- terra::ext(cov_stack2)
+
+study_area <- terra::vect(bbox)
+
+# Ensure that start nodes are drawn from within start_zone and save matrix of the start nodes to use for each iteration:
+
+#Import water body polygons
+water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation.shp") %>% st_transform(crs = 5070)
+
+#filter water body polygons to only include permanent water bodies
+water_polys_filtered <- water_polys %>% filter(WB_PERIOD_ =="PER" ) #|WB_PERIOD_ =="INT"
+
+water_polys_cropped <- water_polys_filtered %>%
+  sf::st_union() %>%
+  sf::st_convex_hull() %>%
+  sf::st_intersection(water_polys_filtered) %>%
+  st_collection_extract('POLYGON') %>%
+  st_union() %>% 
+  st_sf()
 
 
+generate_start_nodes <- function (start_zone, barriers)
+{
+  x1 <- start_zone$xmin
+  x2 <- start_zone$xmax
+  y1 <- start_zone$ymin
+  y2 <- start_zone$ymax
+  
+  x_rand <- runif(1, x1, x2)
+  y_rand <- runif(1, y1, y2)
+    
+  return(cbind(x_rand, y_rand))
+}
 
 ################################ Graveyard #################################
 #cov_stack$roads_hii2 <- (cov_stack$roads_hii^2)

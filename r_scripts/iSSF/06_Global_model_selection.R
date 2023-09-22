@@ -315,8 +315,8 @@ df <- bind_rows(al_ranks) %>% mutate(name = unlist(mod_names), .before=V1)
 ##### Test zone 2 ######
 ncde_4fold <- function (form, dat, cov_stack) {
   # Split out the used GPS points and the available points:
-  case_t <- dplyr::filter(al, case_ == T)
-  case_f <- dplyr::filter(al, case_ == F) %>% dplyr::mutate(group = NA)
+  case_t <- dplyr::filter(dat, case_ == T)
+  case_f <- dplyr::filter(dat, case_ == F) %>% dplyr::mutate(group = NA)
   # Divide the datasets into 4 folds:
   n <- ceiling(nrow(case_t)/4)
   group <- c(replicate(n, sample(1:4, 4, replace = F))) #assign random group numbers to each row of true observations
