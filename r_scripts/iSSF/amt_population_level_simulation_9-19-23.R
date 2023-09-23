@@ -159,29 +159,75 @@ study_area <- terra::vect(bbox)
 #Import water body polygons
 water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation.shp") %>% st_transform(crs = 5070)
 
-#filter water body polygons to only include permanent water bodies
-water_polys_filtered <- water_polys %>% filter(WB_PERIOD_ =="PER" ) #|WB_PERIOD_ =="INT"
-
-water_polys_cropped <- water_polys_filtered %>%
-  sf::st_union() %>%
-  sf::st_convex_hull() %>%
-  sf::st_intersection(water_polys_filtered) %>%
-  st_collection_extract('POLYGON') %>%
-  st_union() %>% 
+water_polys_cropped <-  water_polys %>% 
+  filter(WB_PERIOD_ =="PER" ) %>% #only include permanent water bodies
+  sf::st_crop(cov_stack$tree_cover_hansen) %>% 
+  sf::st_union() %>% 
   st_sf()
 
+#mapview::mapview(water_polys_cropped)
 
-generate_start_nodes <- function (start_zone, barriers)
+
+#Function to generate n start locations outside of water. way faster than the way Sarah did it
+generate_start_nodes <- function (n, start_zone, barriers)
 {
   x1 <- start_zone$xmin
   x2 <- start_zone$xmax
   y1 <- start_zone$ymin
   y2 <- start_zone$ymax
   
-  x_rand <- runif(1, x1, x2)
-  y_rand <- runif(1, y1, y2)
+  nodes <- list()
+  for(i in 1:(n + 100)){
+    x_rand <- runif(1, x1, x2)
+    y_rand <- runif(1, y1, y2)
     
-  return(cbind(x_rand, y_rand))
+    nodes[[i]] <- tibble(X = x_rand, Y = y_rand)
+    
+  }
+  nodes <- bind_rows(nodes)
+  pts<- st_as_sf(nodes, coords = c("X", "Y"), crs = 5070) %>% 
+    mutate(intersects = lengths(st_intersects(., barriers)) > 0)
+  
+  filtered <- pts %>% 
+    filter(intersects==FALSE) %>% 
+    st_coordinates() %>% 
+    as.data.frame()
+  
+  samp <- sample_n(filtered, n)
+  
+  return(samp)
+}
+
+
+
+sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
+  
+  ext <- terra::ext(covs)
+  start_nodes <- generate_start_nodes(n_paths, ext, barriers)
+  
+  paths <- list()
+  for(i in 1:n_paths){
+    x_coord <- start_nodes$X[i]
+    y_coord <- start_nodes$Y[i]
+    
+    start <- make_start(x= c(x_coord, y_coord),
+                        time = ymd_hms("2020-01-01 00:00:00"),
+                        ta = 0,
+                        dt = hours(2),
+                        crs = 5070)
+    
+    
+    k1 <- amt::redistribution_kernel(mod, map = covs, start = start)
+    
+    paths[[i]] <- amt::simulate_path(k1, n.steps = n_steps)
+    
+    print(i)
+  }
+  
+  paths <- bind_rows(paths)
+  
+  return(paths)
+  
 }
 
 ################################ Graveyard #################################
@@ -209,3 +255,34 @@ generate_start_nodes <- function (start_zone, barriers)
 # cov_stack2$ta <- 0
 
 #cov_stack2_rast <- raster::stack(cov_stack2)
+
+
+
+
+#sells method. works, but very slow. Probably more efficient just to generate a bunch of random points and then filter once based on barriers
+# generate_start_nodes <- function (n, start_zone, barriers)
+# {
+#   x1 <- start_zone$xmin
+#   x2 <- start_zone$xmax
+#   y1 <- start_zone$ymin
+#   y2 <- start_zone$ymax
+#   
+#   nodes <- list()
+#   for(i in 1:n){
+#     repeat{
+#       x_rand <- runif(1, x1, x2)
+#       y_rand <- runif(1, y1, y2)
+#       
+#       pt <- tibble(X = x_rand, Y = y_rand)
+#       
+#       rand_point <- st_as_sf(pt, coords = c("X", "Y"), crs = 5070)
+#       
+#       if(lengths(st_intersects(rand_point, barriers)) == 0)
+#         break
+#     }
+#     nodes[[i]] <- pt
+#   }
+#   
+#   nodes <- bind_rows(nodes)
+#   return(nodes)
+# }

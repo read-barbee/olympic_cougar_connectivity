@@ -86,6 +86,9 @@ occ_dat_complete <- occ_dat_scaled %>%
 umf <- unmarkedFrameOccu(y = occ_dat_complete %>% select(d_1:d_365),
                          siteCovs = occ_dat_complete %>% select(station_id, tree_cover_hansen:dist_water))
 
+umf_cell <- unmarkedFrameOccu(y = occ_dat_complete %>% select(d_1:d_365),
+                         siteCovs = occ_dat_complete %>% select(cell_id, tree_cover_hansen:dist_water))
+
 #########################################################################
 ##
 ## 2. Fit global model with quadratics
@@ -106,16 +109,34 @@ run_global <- function (dat){
   return(fit)
 }
 
+run_global_cell <- function (dat){
+  #library(survival)  survival::clogit
+  form <- as.formula(paste0("~1 ~", #remove standard intercept to be replace with stratum-based intercept
+                            #fixed effects
+                            paste(c(params, quad_terms), collapse = " + "), "+",
+                            #random intercept (strata)
+                            "(1|cell_id)"))
+  
+  
+  fit <- stan_occu(form, data=dat, chains=3, iter=1000)
+  return(fit)
+}
 
-system.time(global_fit <- run_global(umf))
 
-
-summary(global_fit)
+#system.time(global_fit <- run_global(umf))
+summary(global_fit, "state")
 
 #saveRDS(global_fit, "occu_global_fit_9-19-23.rds")
 
 #global_fit <- readRDS("occu_global_fit_9-19-23.rds")
 
+system.time(global_fit_cell <- run_global_cell(umf_cell))
+
+summary(global_fit_cell, "state")
+
+#saveRDS(global_fit_cell, "occu_global_fit_cell_9-22-23.rds")
+
+#global_fit_cell <- readRDS("occu_global_fit_cell_9-22-23.rds")
 
 #########################################################################
 ##
@@ -124,14 +145,14 @@ summary(global_fit)
 ##########################################################################
 
 #traceplots
-traceplot(global_fit)
+traceplot(global_fit_cell)
 
 #residual plots
-plot_residuals(global_fit, submodel="state")
-plot_residuals(global_fit, submodel="state", covariate="popdens_hii")
+plot_residuals(global_fit_cell, submodel="state")
+plot_residuals(global_fit_cell, submodel="state", covariate="popdens_hii")
 
 #caluclate and plot actual values against values simulated from the model
-global_fit_gof <- gof(global_fit, draws=100, quiet=TRUE)
+global_fit_gof <- gof(global_fit_cell, draws=100, quiet=TRUE)
 
 plot(global_fit_gof) #doesn't look good
 
@@ -154,10 +175,10 @@ abline(v=actual_prop0, col='red', lwd=2)
 ##
 ##########################################################################
 #marginal covariate effects
-ubms::plot_effects(global_fit, "state")
+ubms::plot_effects(global_fit_cell, "state")
 
 #predict occupancy values for each site
-psi <- predict(global_fit, submodel="state")
+psi <- predict(global_fit_cell, submodel="state")
 
 
 
@@ -230,7 +251,7 @@ cov_stack_rast <- raster::stack(cov_stack_resampled)
 cov_stack_rast$station_id <- as.factor("LEKT_Station1")
 
 mean_station_locs <- occ_dat %>% 
-  group_by(station_id) %>% 
+  group_by(cell_id) %>% 
   summarize(x = mean(x), y = mean(y)) %>% 
   st_as_sf(coords = c("x", "y"), crs = 5070)
 
@@ -281,13 +302,15 @@ max_dists <- tibble(station_id = station_ids,
 
 #works with SpatRaster object but doesn't return raster. Doesn't work with RasterStack
 
-#takes ~23min at 300m resolution. Only seems to work when re.form = NA (random effects not included in predictions)
-system.time(surface_rast <- ubms::predict(object = global_fit, 
+#takes ~23min at 300m resolution. Only seems to work when re.form = NA (random effects not included in predictions). ~7 min with cell_id random eff
+system.time(surface_rast <- ubms::predict(object = global_fit_cell, 
                    submodel = "state", 
                    newdata = cov_stack_rast,
                    transform = TRUE,
                    re.form = NA,
                    level = 0.95))
+
+mapview::mapview(surface_rast$Predicted)
 
 
 #works. see code below to project prediction dataframe into raster surface

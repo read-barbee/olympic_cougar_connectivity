@@ -78,6 +78,15 @@ skok_2021 <- read_csv("data/Camera_Data/2021/Skok_2021/skok_2021_det_hist.csv") 
 
 #2022
 
+lekt_2022 <- read_csv("data/Camera_Data/2022/LEKT_2022/lekt_2022_det_hist.csv") %>% 
+  select(-c(camera_id, cameras)) %>% 
+  rename(station = station_id,
+         lat = latitude,
+         lon = longitude) %>% 
+  unite( "station_id", c(grid_id, station, year), sep = "_", remove = FALSE) %>% 
+  select(station_id, grid_id, station, year, lon, lat, cell_id, everything())
+
+
 pnptc_2022 <- read_csv("data/Camera_Data/2022/PNPTC_2022/pnptc_2022_det_hist.csv") %>% 
   rename(station = station_id,
          lat = latitude,
@@ -103,6 +112,7 @@ data_list <- list(lekt_2019,
                pnptc_2021, 
                makah_2021, 
                skok_2021, 
+               lekt_2022,
                pnptc_2022,
                quin_res_2022)
 
@@ -197,20 +207,20 @@ occ_dat <- dat_wide %>%
          year = as.factor(year))
 
 
-#write_csv(occ_dat, "data/Camera_Data/master/ocp_occ_dat_9-18-23.csv")
+#write_csv(occ_dat, "data/Camera_Data/master/ocp_occ_dat_9-22-23.csv")
 
 
 
-#Create stacked unmarked frame
-library(unmarked)
-
-umf <- unmarkedFrameOccu(y = occ_dat[,9:351],
-                  siteCovs = occ_dat %>% select(station_id, tree_cover_hansen:dist_water))
-
-
-library(ubms)
-
-fit_stack <- stan_occu(~1~scale(tree_cover_hansen) + (1|station_id), 
-                       data=umf, chains=3, iter=100)
-fit_stack
+# #Create stacked unmarked frame
+# library(unmarked)
+# 
+# umf <- unmarkedFrameOccu(y = occ_dat[,9:351],
+#                   siteCovs = occ_dat %>% select(station_id, tree_cover_hansen:dist_water))
+# 
+# 
+# library(ubms)
+# 
+# fit_stack <- stan_occu(~1~scale(tree_cover_hansen) + (1|station_id), 
+#                        data=umf, chains=3, iter=100)
+# fit_stack
 

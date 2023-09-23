@@ -58,7 +58,7 @@ det_covs <- NULL
 ##########################################################################
 
 
-occ_dat <- read_csv("data/Camera_Data/master/ocp_occ_dat_9-18-23.csv") %>% 
+occ_dat <- read_csv("data/Camera_Data/master/ocp_occ_dat_9-22-23.csv") %>% 
   mutate(across(station_id_year:year, as.factor)) %>% 
   mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
   mutate(northing = cos(aspect_rad),
@@ -82,7 +82,7 @@ occ_dat_complete <- occ_dat_scaled %>%
 
 #convert to unmarked dataframe
 umf <- unmarkedFrameOccu(y = occ_dat_complete %>% select(d_1:d_365),
-                         siteCovs = occ_dat_complete %>% select(station_id, tree_cover_hansen:dist_water))
+                         siteCovs = occ_dat_complete %>% select(cell_id, tree_cover_hansen:dist_water))
 
 #########################################################################
 ##
@@ -122,7 +122,7 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
   #filter(corr < 0.977) %>% 
   arrange(desc(corr))
 
-#write_csv(cor_dat, "feature_selection/Occupancy/pairwise_cov_corr_t5_9-19-23.csv")
+#write_csv(cor_dat, "feature_selection/Occupancy/pairwise_cov_corr_t5_9-22-23.csv")
 
 GGally::ggcorr(c_dat, label = TRUE)
 
@@ -138,7 +138,7 @@ doParallel::registerDoParallel(cores = 9)
 
 #### NULL MODEL ###
 
-null_fit <- stan_occu(~1 ~ (1|station_id), data=umf, chains=3, iter=1000)
+null_fit <- stan_occu(~1 ~ (1|cell_id), data=umf, chains=3, iter=1000)
 
 traceplot(null_fit)
 
@@ -153,7 +153,7 @@ names(null_fit_list) <- "null"
 
 cov_names <- occ_covs
 
-#parallelized for loop: fits in ~ 9 minutes with 3 chains and 100 iterations; ~27 min with 1000 iterations
+#parallelized for loop: fits in ~ 9 minutes with 3 chains and 100 iterations; ~37 min with 1000 iterations
 uni_fits <- list()
 system.time(uni_fits <- foreach (i = 1:length(cov_names), .packages=c("ubms"))%dopar%{
   
@@ -163,7 +163,7 @@ system.time(uni_fits <- foreach (i = 1:length(cov_names), .packages=c("ubms"))%d
                             #fixed effects
                             cov, "+",
                             #random intercept (strata)
-                            "(1|station_id)"))
+                            "(1|cell_id)"))
   
   
   stan_occu(form, data=umf, chains=3, iter=1000)
@@ -197,7 +197,7 @@ system.time(uni_fits_quad <- foreach (i = 1:length(cov_names), .packages=c("ubms
                             #fixed effects
                             cov, "+", "I(", cov,  "^2) + ",
                             #random intercept (strata)
-                            "(1|station_id)"))
+                            "(1|cell_id)"))
   
   
   stan_occu(form, data=umf, chains=3, iter=1000)
@@ -222,18 +222,18 @@ names(uni_fits_quad) <- quad_names
 
 uni_fits_all <- c(uni_fits, uni_fits_quad, null_fit_list)
 
-saveRDS(uni_fits_all, "occu_uni_fits_9-19-23.rds")
+#saveRDS(uni_fits_all, "occu_uni_fits_re_cell_9-22-23.rds")
 
-uni_fits_all <- readRDS("occu_uni_fits_9-19-23.rds")
+#uni_fits_all <- readRDS("occu_uni_fits_re_cell_9-22-23.rds")
 
 fit_list <- fitList(uni_fits_all)
 
 mod_sel <- modSel(fit_list, nullmod="null") %>% 
   rownames_to_column(var = "model")
 
-test <- waic(uni_fits_all[[1]])
+#test <- waic(uni_fits_all[[1]])
 
-waic(uni_fits_all[[1]])$estimates %>% as.data.frame() %>% rownames_to_column(var = "metric") %>% pivot_wider(names_from = "metric", values_from = c("Estimate", "SE"))
+# waic(uni_fits_all[[1]])$estimates %>% as.data.frame() %>% rownames_to_column(var = "metric") %>% pivot_wider(names_from = "metric", values_from = c("Estimate", "SE"))
 
 
 estimates <- list()
@@ -266,7 +266,7 @@ occu_uni_summ_filt <- occu_uni_summ %>%
 
 
 
-write_csv(occu_uni_summ_filt, "feature_selection/Occupancy/occu_uni_summary_quad_residents_9-18-23.csv")
+#write_csv(occu_uni_summ_filt, "feature_selection/Occupancy/occu_uni_summary_re_cell_9-22-23.csv")
 
 
 
