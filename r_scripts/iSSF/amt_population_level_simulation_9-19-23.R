@@ -75,27 +75,23 @@ names(cov_stack) <- c("tree_cover_hansen",
                       "evi",
                       "dist_water")
 
+#add aspect transformations
 cov_stack$northing <- cos((pi*cov_stack$aspect)/180)
 cov_stack$easting <- sin((pi*cov_stack$aspect)/180)
-cov_stack$station_id = as.factor("LEKT_Station1")
+#cov_stack$station_id = as.factor("LEKT_Station1")
 
+#resample cov_stack to lower resolution for simulation
+cov_stack2 <- terra::aggregate(cov_stack, fact=10, cores=5)
 
 ########################################################################
 ##
-## 2. Set starting points and make redistribution kernel
+## 2. Set up iSSF model for simulation
 ##
 ##########################################################################
 
+#extract coefficient estimates from the fitted muff-style global model
 top_estimates <- summary(top_mod)$coefficients$cond %>% as.data.frame() %>% rownames_to_column("term") %>% select(term, Estimate)
 
-# coefs <- vector()
-# for(i in 1:nrow(top_estimates)){
-#   tm <- top_estimates$term[i] %>% 
-#     str_replace(coll("^2)"), "2") %>% 
-#     str_remove(coll("I("))
-#   
-#   coefs[i] <- paste0(tm, " = ", top_estimates$Estimate[i])
-# }
 
 coefs <- vector()
 names <- vector()
@@ -107,55 +103,32 @@ for(i in 1:nrow(top_estimates)){
     str_c("_end")
 }
 
-
-
 names(coefs) <- names
 
-#linear terms only
+#subset linear terms only
 coefs_linear <- coefs[str_detect(names, "2", negate = TRUE)] 
 
 # cov_stack2 <- cov_stack[[names(cov_stack) %in% names(coefs_linear)]]
 # coefs_linear <- coefs_linear[names(cov_stack2)]
 
-cov_stack2 <- terra::aggregate(cov_stack, fact=10, cores=5)
 
+# OptionaL: artificially construct gamma distribution
+# x <- seq(0.1, 10, 0.1)
+# plot(x, dgamma(x, shape = 2, scale = 2), type = "l")
 
-
-#plot constructred gamma distribution
-x <- seq(0.1, 10, 0.1)
-plot(x, dgamma(x, shape = 2, scale = 2), type = "l")
-
-
+#Fit a global issf style model using the muff-estimated coefficients.
 mod <- make_issf_model(coefs = c(coefs_linear, sl_ = median(steps$sl_, na.rm=T), ta_ = median(steps$ta_, na.rm=T)),
                        sl = fit_distr(steps$sl_, "gamma", na.rm = TRUE),
                        ta =fit_distr(steps$ta_, "vonmises", na.rm = TRUE))
 
 
-start <- make_start(x= c(-2114054, 3007263),
-                    #time = ymd_hms("2022-04-05 05:00:35"),
-                    ta = 0,
-                    dt = hours(2),
-                    crs = 5070)
+########################################################################
+##
+## 3. Prepare barrier polygons and start zone for simulation
+##
+##########################################################################
 
-
-k1 <- amt::redistribution_kernel(mod, map = cov_stack2, start = start)
-
-s1 <- simulate_path(k1, n.steps = 1000)
-
-terra::plot(cov_stack2$tree_cover_hansen)
-lines(s1$x_, s1$y_, col = "red")
-
-# 
-# k1 <- redistribution_kernel(mod, map = cov_stack, start = start,
-#                             landscape = "continuous", tolerance.outside = 0.2, 
-#                             n.control = 1e4)
-
-bbox <- terra::ext(cov_stack2)
-
-study_area <- terra::vect(bbox)
-
-# Ensure that start nodes are drawn from within start_zone and save matrix of the start nodes to use for each iteration:
-
+## Create non-habitat zones where simulation starts shouldnt be generated (i.e. water bodies)
 #Import water body polygons
 water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation/DNR_Hydrography_-_Water_Bodies_-_Forest_Practices_Regulation.shp") %>% st_transform(crs = 5070)
 
@@ -168,23 +141,22 @@ water_polys_cropped <-  water_polys %>%
 #mapview::mapview(water_polys_cropped)
 
 
+#import study area poly to use as generation zone for starting points
+start_zone <- st_read("data/Habitat_Covariates/study_area_polys/sim_start_zone_w_I5_9-25-23.shp")
+
+start_zone<- start_zone$geometry
+
+########################################################################
+##
+## 4. Simulate
+##
+##########################################################################
+
 #Function to generate n start locations outside of water. way faster than the way Sarah did it
 generate_start_nodes <- function (n, start_zone, barriers)
 {
-  x1 <- start_zone$xmin
-  x2 <- start_zone$xmax
-  y1 <- start_zone$ymin
-  y2 <- start_zone$ymax
+  nodes <- st_sample(start_zone, size = n + 100, type = "random", exact = FALSE)
   
-  nodes <- list()
-  for(i in 1:(n + 100)){
-    x_rand <- runif(1, x1, x2)
-    y_rand <- runif(1, y1, y2)
-    
-    nodes[[i]] <- tibble(X = x_rand, Y = y_rand)
-    
-  }
-  nodes <- bind_rows(nodes)
   pts<- st_as_sf(nodes, coords = c("X", "Y"), crs = 5070) %>% 
     mutate(intersects = lengths(st_intersects(., barriers)) > 0)
   
@@ -199,10 +171,10 @@ generate_start_nodes <- function (n, start_zone, barriers)
 }
 
 
-
+#Function to simulate n paths of desired length based on a single global model
 sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
   
-  ext <- terra::ext(covs)
+  ext <- start_zone
   start_nodes <- generate_start_nodes(n_paths, ext, barriers)
   
   paths <- list()
@@ -221,16 +193,91 @@ sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
     
     paths[[i]] <- amt::simulate_path(k1, n.steps = n_steps)
     
-    print(i)
+    print(paste0(i, "/", n_paths ))
   }
   
-  paths <- bind_rows(paths)
+  paths <- bind_rows(paths, .id = "path_id")
   
   return(paths)
   
 }
 
+#run simulation
+system.time(test <- sim_paths_general(5, 5000, mod, cov_stack2, barriers))
+
+#plot simulated paths
+test %>% st_as_sf(coords = c("x_", "y_"), crs = 5070) %>% mapview::mapview()
+
 ################################ Graveyard #################################
+
+
+# coefs <- vector()
+# for(i in 1:nrow(top_estimates)){
+#   tm <- top_estimates$term[i] %>% 
+#     str_replace(coll("^2)"), "2") %>% 
+#     str_remove(coll("I("))
+#   
+#   coefs[i] <- paste0(tm, " = ", top_estimates$Estimate[i])
+# }
+
+
+# start <- make_start(x= c(-2114054, 3007263),
+#                     #time = ymd_hms("2022-04-05 05:00:35"),
+#                     ta = 0,
+#                     dt = hours(2),
+#                     crs = 5070)
+# 
+# 
+# k1 <- amt::redistribution_kernel(mod, map = cov_stack2, start = start)
+# 
+# s1 <- simulate_path(k1, n.steps = 1000)
+# 
+# terra::plot(cov_stack2$tree_cover_hansen)
+# lines(s1$x_, s1$y_, col = "red")
+
+# 
+# k1 <- redistribution_kernel(mod, map = cov_stack, start = start,
+#                             landscape = "continuous", tolerance.outside = 0.2, 
+#                             n.control = 1e4)
+
+
+# Ensure that start nodes are drawn from within start_zone and save matrix of the start nodes to use for each iteration:
+
+# generate_start_nodes <- function (n, start_zone, barriers)
+# {
+#   x1 <- start_zone$xmin
+#   x2 <- start_zone$xmax
+#   y1 <- start_zone$ymin
+#   y2 <- start_zone$ymax
+#   
+#   nodes <- list()
+#   for(i in 1:(n + 100)){
+#     x_rand <- runif(1, x1, x2)
+#     y_rand <- runif(1, y1, y2)
+#     
+#     nodes[[i]] <- tibble(X = x_rand, Y = y_rand)
+#     
+#   }
+#   nodes <- bind_rows(nodes)
+#   pts<- st_as_sf(nodes, coords = c("X", "Y"), crs = 5070) %>% 
+#     mutate(intersects = lengths(st_intersects(., barriers)) > 0)
+#   
+#   filtered <- pts %>% 
+#     filter(intersects==FALSE) %>% 
+#     st_coordinates() %>% 
+#     as.data.frame()
+#   
+#   samp <- sample_n(filtered, n)
+#   
+#   return(samp)
+# }
+
+
+
+
+
+
+
 #cov_stack$roads_hii2 <- (cov_stack$roads_hii^2)
 
 
