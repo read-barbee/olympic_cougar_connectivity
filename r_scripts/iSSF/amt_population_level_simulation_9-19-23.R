@@ -16,6 +16,7 @@ library(amt)
 library(beepr)
 library(sf)
 library(terra)
+library(scico)
 
 
 #import top model fit
@@ -203,10 +204,79 @@ sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
 }
 
 #run simulation
-system.time(test <- sim_paths_general(5, 5000, mod, cov_stack2, barriers))
+system.time(paths <- sim_paths_general(5, 2000, mod, cov_stack2, barriers))
 
 #plot simulated paths
-test %>% st_as_sf(coords = c("x_", "y_"), crs = 5070) %>% mapview::mapview()
+paths_sf <- paths %>% st_as_sf(coords = c("x_", "y_"), crs = 5070)
+
+mapview::mapview(paths_sf)
+
+########################################################################
+##
+## 4. Calculate UD from simulated paths (amt) -maybe unnecessary
+##
+##########################################################################
+
+test2 <- split(test, test$path_id)
+
+n <- 5
+#system.time(p1 <- replicate(n, simulate_path(rdk.1a, n = 30), simplify = FALSE))
+
+# UD--note, this is based around homeranging behavior
+uds <- lapply(c(5, 2000), function(i) {
+  tibble(
+    rep = 1:n, 
+    path = map(test2, ~ dplyr::slice(.x, i))
+  ) |> unnest(cols = path) |> filter(!is.na(x_)) |> 
+    make_track(x_, y_) |> hr_kde(trast = cov_stack2_rast[[1]])
+})
+
+
+#Plot UD
+xy <- as.data.frame(uds[[2]]$ud, xy = TRUE)
+names(xy) <- c("x", "y", "w")
+
+pl3 <- ggplot(xy, aes(x, y, fill = tree_cover_hansen)) + geom_raster()  +
+  #geom_path(aes(x, y), data = geom(p, df = TRUE), lty = 2, col = "grey30", 
+            #inherit.aes = FALSE) +
+  coord_equal() + 
+  theme_light() +
+  #geom_point(x = 0, y = 0, col = "red") +
+  theme(legend.position = "none") +
+  scale_fill_scico(palette = "lajolla") +
+  #scale_y_continuous(limits = c(-80, 80)) + scale_x_continuous(
+    #limits = c(-80, 80)) + 
+  theme(axis.title.y = element_blank(), axis.text.y = element_blank()) +
+  labs(x = "x")
+
+
+
+
+########################################################################
+##
+## 4. Tally number of steps taken per raster cell
+##
+##########################################################################
+
+#template raster for count calculation
+tmp_rast <- cov_stack2$tree_cover_hansen
+values(tmp_rast) <- 0
+
+
+#generate raster of the number of times each cell was used
+count_rast <- raster::rasterize(paths_sf, tmp_rast, fun = "count")
+
+
+#bin counts by quantile
+pred_vals <- terra::values(count_rast)
+breaks <- quantile(pred_vals, probs = 0:10/10, na.rm = T) #obtain 10 quantile values for preds
+#breaks_j <- breaks + (seq_along(breaks) * .Machine$double.eps) #add jitter to breaks
+binned <- terra::classify(count_rast, rcl=as.vector(breaks_j))
+
+
+#layercor
+
+
 
 ################################ Graveyard #################################
 
