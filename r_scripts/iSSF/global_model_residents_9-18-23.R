@@ -15,6 +15,7 @@ library(amt)
 #library(INLA)
 library(beepr)
 library(buildmer)
+library(INLA)
 
 #########################################################################
 ##
@@ -164,6 +165,62 @@ global_fit_quad <- readRDS("muff_global_fit_quad_res_9-19-23.rds")
 
 #including quadratic terms improves AIC
 
+#########################################################################
+##
+## 2. Fit global model with quadratics in INLA
+##
+##########################################################################
+
+rand_terms_inla <- vector()
+n_indiv = steps_scaled %>% distinct(animal_id) %>% count() %>% pull()
+
+for(i in 1:length(params)){
+  rand_terms_inla[i] <- paste0("f(", paste0("id", i), ", ", params[i], ", ", "values = ", paste0("1:",n_indiv), ", ", 'model = "iid", ', "hyper = list(theta = list(initial = log(1), fixed = FALSE, ", 'prior = "pc.prec", ', "param = c(1, .05))))")
+}
+
+
+
+run_global_inla <- function (dat){
+  
+  #convert response from categorical to numeric
+  dat <- dat %>% mutate(case_ = as.numeric(case_))
+  
+  #create separate animal_id columns for each random effect
+  for(i in 1:length(rand_terms_inla)){
+    name <- as.name(paste0("id", i))
+    dat[[name]] <- as.numeric(factor(dat$animal_id))
+  }
+  
+  #construct the model formula with quadratic terms
+  form <- as.formula(paste("case_ ~ ",  
+                           #fixed effects
+                           paste(c(params, quad_terms), collapse = " + "), "+",
+                           #random intercept (strata)
+                           "f(step_id_, model='iid', hyper=list(theta = list(initial=log(1e-6),fixed=T))) + ",
+                           #random slopes
+                           paste(rand_terms_inla, collapse = " + ")))
+  
+  #fit the model    
+  fit <- inla(form, family ="poisson", data=dat)
+  
+  return(fit)
+}
+
+system.time(inla_fit <- run_global_inla(steps_scaled))
+
+
+#########################################################################
+##
+## 2. LOO Cross-Validation in INLA
+##
+##########################################################################
+
+inla_cv <- inla.group.cv(inla_fit)
+ULOOCV = mean(inla_cv$cv)
+
+#control.fixed = list(
+# mean = mean.beta,
+# prec = list(default = prec.beta)), control.compute = list(dic = TRUE)
 
 #########################################################################
 ##

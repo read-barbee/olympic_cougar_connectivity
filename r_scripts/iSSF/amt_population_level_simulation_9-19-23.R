@@ -135,9 +135,18 @@ water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/DNR_Hy
 
 water_polys_cropped <-  water_polys %>% 
   filter(WB_PERIOD_ =="PER" ) %>% #only include permanent water bodies
-  sf::st_crop(cov_stack$tree_cover_hansen) %>% 
+  sf::st_crop(cov_stack$tree_cover_hansen)
+  
+water_polys_start <- water_polys_cropped %>% 
   sf::st_union() %>% 
   st_sf()
+
+water_barriers <- water_polys_cropped %>% 
+  filter(SHAPEAREA >= 2000000) %>% 
+  sf::st_union() %>% 
+  st_sf() %>% patches
+
+cov_stack_masked <- mask(cov_stack2, water_barriers)
 
 #mapview::mapview(water_polys_cropped)
 
@@ -211,6 +220,32 @@ paths_sf <- paths %>% st_as_sf(coords = c("x_", "y_"), crs = 5070)
 
 mapview::mapview(paths_sf)
 
+
+########################################################################
+##
+## 4. Tally number of steps taken per raster cell
+##
+##########################################################################
+
+#template raster for count calculation
+tmp_rast <- cov_stack2$tree_cover_hansen
+values(tmp_rast) <- 0
+
+
+#generate raster of the number of times each cell was used
+count_rast <- raster::rasterize(paths_sf, tmp_rast, fun = "count")
+
+
+#bin counts by quantile
+pred_vals <- terra::values(count_rast)
+breaks <- quantile(pred_vals, probs = 0:10/10, na.rm = T) #obtain 10 quantile values for preds
+#breaks_j <- breaks + (seq_along(breaks) * .Machine$double.eps) #add jitter to breaks
+binned <- terra::classify(count_rast, rcl=as.vector(breaks_j))
+
+
+#layercor
+
+
 ########################################################################
 ##
 ## 4. Calculate UD from simulated paths (amt) -maybe unnecessary
@@ -238,43 +273,18 @@ names(xy) <- c("x", "y", "w")
 
 pl3 <- ggplot(xy, aes(x, y, fill = tree_cover_hansen)) + geom_raster()  +
   #geom_path(aes(x, y), data = geom(p, df = TRUE), lty = 2, col = "grey30", 
-            #inherit.aes = FALSE) +
+  #inherit.aes = FALSE) +
   coord_equal() + 
   theme_light() +
   #geom_point(x = 0, y = 0, col = "red") +
   theme(legend.position = "none") +
   scale_fill_scico(palette = "lajolla") +
   #scale_y_continuous(limits = c(-80, 80)) + scale_x_continuous(
-    #limits = c(-80, 80)) + 
+  #limits = c(-80, 80)) + 
   theme(axis.title.y = element_blank(), axis.text.y = element_blank()) +
   labs(x = "x")
 
 
-
-
-########################################################################
-##
-## 4. Tally number of steps taken per raster cell
-##
-##########################################################################
-
-#template raster for count calculation
-tmp_rast <- cov_stack2$tree_cover_hansen
-values(tmp_rast) <- 0
-
-
-#generate raster of the number of times each cell was used
-count_rast <- raster::rasterize(paths_sf, tmp_rast, fun = "count")
-
-
-#bin counts by quantile
-pred_vals <- terra::values(count_rast)
-breaks <- quantile(pred_vals, probs = 0:10/10, na.rm = T) #obtain 10 quantile values for preds
-#breaks_j <- breaks + (seq_along(breaks) * .Machine$double.eps) #add jitter to breaks
-binned <- terra::classify(count_rast, rcl=as.vector(breaks_j))
-
-
-#layercor
 
 
 
