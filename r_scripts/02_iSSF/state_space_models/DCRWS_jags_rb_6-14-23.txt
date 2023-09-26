@@ -1,0 +1,83 @@
+model
+{
+#  "DCRWS" (Switching) model from Ian D Jonsen, Joanna Mills Flemming and Ransom A Myers
+#    Robust state-space modeling of animal movement data
+#    jonsen@mathstat.dal.ca
+#    Created by Ian Jonsen, 10/29/2004, last modified, 06/23/2005
+
+pi <- 3.141592653589
+npi <- pi * -1
+
+Omega[1,1] <- 1
+Omega[1,2] <- 0
+Omega[2,1] <- 0
+Omega[2,2] <- 1
+
+## priors on process uncertainty
+iSigma[1:2,1:2] ~ dwish(Omega[,],2)	
+Sigma[1:2,1:2] <- inverse(iSigma[,])
+
+theta[1] ~ dunif(npi,pi)		## prior for theta in behavioral mode 1
+theta[2] ~ dunif(npi,pi)		## prior for theta in behavioral mode 2
+
+gamma[1] ~ dbeta(1,1)	## prior for gamma in mode 1
+gamma[2] ~ dbeta(1,1)	## prior for gamma in mode 2 
+
+alpha[1] ~ dunif(0,1)	## prob of being in mode 1 at t, given in mode 1 at t-1
+alpha[2] ~ dunif(0,1)	## prob of being in mode 1 at t, given in mode 2 at t-1
+
+lambda[1] ~ dunif(0,1)
+lambda[2] <- 1 - lambda[1]
+bmode[1] ~ dcat(lambda[]) ## assign behavioral mode for first obs
+
+psi ~ dunif(0,10)		## scaling factor for estimation error
+
+## Priors for first location
+
+for(k in 1:2){
+	x[1,k] ~ dt(y[1,k], itau2[1,k], nu[1,k])
+	}
+
+for(k in 1:2){
+## Assume simple random walk to estimate 2nd unobserved state
+x[2,k] ~ dmnorm(x[1,k], iSigma[,])
+}
+
+## Transition equation
+for(t in 2:(RegN-1)){
+
+	phi[t,1] <- alpha[bmode[t-1]]
+	phi[t,2] <- 1 - alpha[bmode[t-1]]
+	bmode[t] ~ dcat(phi[t,])
+	
+	## Build transition matrix for rotational component	
+	T[t,1,1] <- cos(theta[bmode[t]])
+	T[t,1,2] <- (-sin(theta[bmode[t]]))
+	T[t,2,1] <- sin(theta[bmode[t]])
+	T[t,2,2] <- cos(theta[bmode[t]])
+	for(k in 1:2){
+		Tdx[t,k] <- T[t,k,1] * (x[t,1] - x[t-1,1]) + T[t,k,2] * (x[t,2] - x[t-1,2])	## matrix multiplication
+		x.mn[t,k] <- x[t,k] + gamma[bmode[t]] * Tdx[t,k]	## estimation next location (no error)
+		}
+			
+	x[t+1,1:2] ~ dmnorm(x.mn[t,], iSigma[,])	## estimate next location (with error)
+	}
+
+##	Measurement equation
+for(t in 2:RegN){					# loops over regular time intervals (t)
+	for(i in idx[t-1]:(idx[t]-1)){			# loops over observed locations within interval t
+		for(k in 1:2){
+			itau2.psi[i,k] <- itau2[i,k] * psi
+			zhat[i,k] <- (1-j[i]) * x[t-1,k] + j[i] * x[t,k]
+			y[i,k] ~ dt(zhat[i,k], itau2.psi[i,k], nu[i,k])
+			}
+		}
+	}	
+}
+
+# When running in WinBUGS gui mode:
+
+# Paste data here (eg. hsdata.txt)
+
+
+# Paste inits here (eg. hsDCRWSinits.txt)

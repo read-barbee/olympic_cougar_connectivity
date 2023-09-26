@@ -1,0 +1,123 @@
+model
+{
+#  "DCRWS" (Switching) model from Ian D Jonsen, Joanna Mills Flemming and Ransom A Myers
+#    Robust state-space modeling of animal movement data
+#    jonsen@mathstat.dal.ca
+#    Created by Ian Jonsen, 10/29/2004, last modified, 06/23/2005
+
+pi <- 3.141592653589
+npi <- pi * -1
+
+Omega[1,1] <- 1 ## symmetric positive-definite precision matrix
+Omega[1,2] <- 0
+Omega[2,1] <- 0
+Omega[2,2] <- 1
+
+## priors on process uncertainty
+iSigma[1:2,1:2] ~ dwish(Omega[,],2) ## wishert distribution (prior for precision of multivariate normal distribution) 	
+Sigma[1:2,1:2] <- inverse(iSigma[,]) # comma for matrix
+
+theta[1] ~ dunif(npi,pi)		## prior for theta in behavioral mode 1
+theta[2] ~ dunif(npi,pi)		## prior for theta in behavioral mode 2
+
+gamma[1] ~ dbeta(1,1)	## prior for gamma in mode 1
+gamma[2] ~ dbeta(1,1)	## prior for gamma in mode 2 
+
+alpha[1] ~ dunif(0,1)	## prob of being in mode 1 at t, given in mode 1 at t-1
+alpha[2] ~ dunif(0,1)	## prob of being in mode 1 at t, given in mode 2 at t-1
+
+lambda[1] ~ dunif(0,1) ## probability of being in behavioral state 1
+lambda[2] <- 1 - lambda[1] ## probability of being in behavioral state 2
+bmode[1] ~ dcat(lambda[]) ## assign behavioral mode for first obs defining initial behavioral mode from categorical distribution. Empty brackets go across all values of lambda
+
+psi ~ dunif(0,10)		## scaling factor for estimation error
+
+## Priors for first location
+for(k in 1:2){
+	x[1,k] ~ dt(y[1,k], itau2[1,k], nu[1,k]) ## [row, column] indexing
+	}
+
+## Assume simple random walk to estimate 2nd unobserved state
+#x[2,1:2] ~ dmnorm(x[1,], iSigma[,])
+x[2,1:2] ~ dmnorm(x[1,], Omega[,])
+
+## Transition equation
+for(t in 2:(RegN-1)){
+
+	phi[t,1] <- alpha[bmode[t-1]] ## phi is a matrix of state probabilities (alpha) based on previous step
+	phi[t,2] <- 1 - alpha[bmode[t-1]]
+	bmode[t] ~ dcat(phi[t,]) #generate vector of behavioral states for each time step based on probability matrix
+	
+	## Build transition matrix for rotational component[time, row, column]
+	T[t,1,1] <- cos(theta[bmode[t]])
+	T[t,1,2] <- (-sin(theta[bmode[t]]))
+	T[t,2,1] <- sin(theta[bmode[t]])
+	T[t,2,2] <- cos(theta[bmode[t]])
+	for(k in 1:2){
+		Tdx[t,k] <- T[t,k,1] * (x[t,1] - x[t-1,1]) + T[t,k,2] * (x[t,2] - x[t-1,2])	## matrix multiplication. Tdx is matrix of changes in locations (distances) from one time step to the next
+		x.mn[t,k] <- x[t,k] + gamma[bmode[t]] * Tdx[t,k]	
+		
+		## estimation next location (no error). Multiply change matrix by gamma and add to previous location. 
+		## K is just an index for T matrix here in tdx line, lat/long in x.mn line.
+		}
+			
+	x[t+1,1:2] ~ dmnorm(x.mn[t,], iSigma[,])  ## estimate next location. Mu = previous location + value from distance matrix with autocorrelation and is the estimated location without error. Sigma is the error matrix. 
+	}
+
+##	Measurement equation
+for(t in 2:RegN){					# loops over regular time intervals (t). RegN is the number of regular intervals
+	for(i in idx[t-1]:(idx[t]-1)){			# loops over observed locations within interval t
+		for(k in 1:2){
+			itau2.psi[i,k] <- itau2[i,k] * psi
+			zhat[i,k] <- (1-j[i]) * x[t-1,k] + j[i] * x[t,k] # how much of regular interval had actually passed
+			#zhat[i,k] <- x[t-1,k] + x[t,k] 
+            y[i,k] ~ dt(zhat[i,k], itau2.psi[i,k], nu[i,k]) 
+
+# dt(expected location (mu), measurement error). This is defining the expected distribution underlying the observed data that the model should use to estimate the parameters for which priors were provided.
+			}
+		}
+	}	
+}
+
+# ~ indicates data or prior as input to model. X and y are the input data
+
+# When running in WinBUGS gui mode:
+
+# Paste data here (eg. hsdata.txt)
+
+
+# Paste inits here (eg. hsDCRWSinits.txt)
+
+
+
+## Glossary of variables:
+
+## Priors (Parameters to be estimated)## 
+#Omega: symmetric positive-definite precision matrix used as prior for process variance (the error component of the model)
+#Sigma: the process variance matrix used as the standard deviation parameter in the bivariate normal distribution accounting for uncertainty in the transition equation.
+#iSigma: the inverse of Sigma
+#theta: the vector of mean turning angles for the correlated random walk (CRW) (one for each behavioral state)
+#gamma: the vector of autocorrelation coefficients for the CRW (one for each behavioral state). Controls the correlation in turn angle and movement speed between steps.
+#alpha: vector of state switching probabilities. alpha[1] = prob of being in mode 1 at t, given in mode 1 at t-1; alpha[2] = prob of being in mode 1 at t, given in mode 2 at t-1.
+#lambda: vector of state probabilities, i.e. the probability of being in a particular state at any given point in time. One element for each state.
+#bmode: vector of behavioral state at each regular time step. Initial value selected based on state probabilities (lambda). Remaining values calculated with phi matrix in transition equation.
+#psi: scaling factor for location estimation error
+#x: initial location
+
+## Transition Equation ##
+#phi: matrix of state switching probabilities at each time step given the behavioral state at the previous time step (alpha values). Each row is a time step. 3 columns: time step index, alpha value for behavioral state at previous step, and inverse of that alpha value.
+#T: transition matrix of turn angles based on the theta value associated with the behavioral state at each time step.
+#Tdx: matrix of changes in locations (distances) from one time step to the next for each time step. Calculated as the difference between locations (lat/long) for each time step multiplied by the appropriate element of the transition matrix. Final values are the sum of the difference in latitudes and longitudes between points multiplied by their relevant T matrix values.
+#x.mn: the mean parameter for the bivariate normal distribution used to interpolate locations for each time step. Calculated as the location at time t + the product of the gamma parameter for the behavioral state at time t and the value of the distance matrix at time t. 
+
+
+## Measurement Equation ##
+#RegN: the total number of regular intervals in an animal's track (single integer). Calculated in R.
+#idx: vector of the cumulative sum of actual (irregular) observations within each regular interval. Calculated in R.
+#itau2: vector of precisions quantifying degree of location error for each data quality class (in my case 2D, 3D). Scaled using psi. One element for latitude and one for longitude.
+#zhat: the mu parameter in the t distribution governing the process generating the observed data. Allows interpolation of best estimate for each irregularly observed location. Calculated as location at time t * proportion of regular interval at which it occurred (j) + location at t-1 * 1 - j. 
+#nu: vector of the degrees of freedom of the estimated t distribution generating the observed data. One element for lat and one for long. 
+#y: the vector of regularized interpolated points (estimated states) generated based on the estimated t distribution generating the observed data.
+
+
+
