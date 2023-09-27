@@ -3,6 +3,7 @@
 # Author: Read Barbee
 
 # Date:2023-06-01
+# Last updated:2023-09-26
 
 # Inputs:
 #   •	GPS0: Raw GPS locations
@@ -44,6 +45,10 @@ deployments <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/
 
 # Dispersal inventory from Teams (3-13-2023)
 dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_5-11-2023.csv")
+
+#Import dispersal dates (from nsd analysis)
+dispersal_dates <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_reduced_7-05-2023.csv") %>% 
+  mutate(disp_date_nsd = mdy(disp_date_nsd)) %>% select(-sex)
 
 #raster file for study area mask
 mask <- rast("data/Habitat_Covariates/homerange_habitat_layers_JR_9-14-22/assets/puma_forest_op.tif")
@@ -91,6 +96,60 @@ locs_raw %>%
   filter(!is.na(lat_wgs84) & is.na(dop)) %>% 
   distinct(animal_id)
 
+
+#########################################################################
+##
+## 2. Add demographic metadata
+##
+##########################################################################
+
+#Filter deploment list to get one row per individual
+first_deps <- deployments %>% 
+  clean_names() %>% 
+  distinct(name, .keep_all = TRUE) %>% 
+  mutate(name = trimws(name))
+
+#Get vector of disperser names
+disperser_names <- dispersals %>% 
+  clean_names() %>% 
+  filter(!is.na(name)) %>% 
+  distinct(name) %>% 
+  pull(name)
+
+
+#Add dispersal status to deployment list
+dem_cats <- first_deps %>% 
+  mutate(dispersal_status = case_when(name %in% disperser_names == TRUE ~ "disperser",
+                                      name %in% disperser_names == FALSE ~ "resident")) %>% 
+  select(name,
+         sex,
+         dispersal_status) %>% 
+  rename(animal_id=name)
+
+
+#Nest locations by animal_id and add columns for sex and dispersal status
+locs_nested <- locs_raw %>% 
+  nest_by(animal_id) %>% 
+  left_join(dem_cats, by = join_by(animal_id)) %>% 
+  left_join(dispersal_dates, by = join_by(animal_id)) %>% 
+  select(animal_id, sex, dispersal_status:disp_qual, data)
+
+
+locs_dem <- locs_nested %>% unnest(cols = data)
+
+#########################################################################
+##
+## 9. Create column indicating which steps were during active dispersals
+##
+##########################################################################
+
+locs_dem <- locs_dem %>% 
+  mutate(dispersing = case_when(date_time_local >= disp_date_nsd ~ TRUE,
+                                date_time_local < disp_date_nsd ~ FALSE,
+                                is.na(disp_date_nsd) == TRUE ~ NA), .after = disp_qual)
+
+
+
 #########################################################################
 ##
 ## 3. Remove missing fixes and locations with missing DOP scores
@@ -98,7 +157,7 @@ locs_raw %>%
 ##########################################################################
 
 #remove missing locations
-locs_raw_no_na <- locs_raw %>% filter(!is.na(lat_wgs84))
+locs_raw_no_na <- locs_dem %>% filter(!is.na(lat_wgs84))
 
 #remove the 22 locations that are missing dop scores
 
@@ -183,7 +242,7 @@ geo_filt <- dop_filt %>% sf::st_as_sf(coords=c("lon_wgs84", "lat_wgs84"), crs=43
 #convert geo-sreened sf object back to dataframe for comparison with df before geo-screenieng
 geo_screened_df <- geo_filt %>% 
   as.data.frame() %>% 
-  select(-geometry)
+  select(unique_id, deployment_id, animal_id, collar_id, everything(), -geometry)
 
 #get dataframe of differences before and after geo-screening
 geo_removed <- setdiff(dop_filt, geo_screened_df)
@@ -230,5 +289,5 @@ summary_table <- tibble(Step = c("Location Attempts",
 summary_table
 
 
-#write_csv(geo_screened_df, "data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-11-2023.csv")
+#write_csv(geo_screened_df, "data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_9-26-2023.csv")
 

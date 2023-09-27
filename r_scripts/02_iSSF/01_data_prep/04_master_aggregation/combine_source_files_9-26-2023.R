@@ -20,6 +20,7 @@
 library(tidyverse)
 library(lubridate)
 library(janitor)
+library(sf)
 
 
 #########################################################################
@@ -78,7 +79,7 @@ locs_all_deps <- locs_all %>% distinct(deployment_id) %>% pull()
 setdiff(deployments_master %>% pull(deployment_id), locs_all_deps)
 setdiff(locs_all_deps, deployments_master %>% pull(deployment_id))
 
-setdiff(deployments_master %>% pull(deployment_id), trimmed_all %>% distinct(deployment_id) %>% pull())
+#setdiff(deployments_master %>% pull(deployment_id), trimmed_all %>% distinct(deployment_id) %>% pull())
 
 #total deployments: 171
 
@@ -158,6 +159,8 @@ utm_coords <- trimmed_all %>%
   sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, na.fail=FALSE) %>% 
   st_transform(crs=5070) %>% 
   st_coordinates()
+
+
 
 
 #########################################################################
