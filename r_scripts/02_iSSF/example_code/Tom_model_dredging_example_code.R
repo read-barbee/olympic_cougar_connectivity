@@ -1,3 +1,10 @@
+
+#values from https://conservancy.umn.edu/bitstream/handle/11299/204737/Otters_SSF.html?sequence=40#inla-1
+
+mean.beta = 0
+prec.beta = 1e-4
+
+
 vars <- c("tri + f(id1, tri, values=1:74,model='iid',hyper=list(theta=list(initial=log(1),fixed=F,prior='pc.prec',param=c(3,0.05))))",
           "tpi + f(id2, tpi, values=1:74,model='iid',hyper=list(theta=list(initial=log(1),fixed=F,prior='pc.prec',param=c(3,0.05))))",
           "ndvi + f(id3, ndvi, values=1:74,model='iid',hyper=list(theta=list(initial=log(1),fixed=F,prior='pc.prec',param=c(3,0.05))))",

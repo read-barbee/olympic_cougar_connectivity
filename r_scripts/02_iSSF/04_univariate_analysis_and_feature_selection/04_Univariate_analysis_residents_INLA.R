@@ -35,6 +35,9 @@ doParallel::registerDoParallel(cores = 9)
 #no imputation
 steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv")
 
+
+#steps$ndvi2 <- steps$ndvi * 0.0001
+
 #imputed and rerouted
 #steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_imputed_7-12-2023.csv")
 
@@ -121,8 +124,10 @@ dummy <- steps_scaled %>% select(sl_, ta_, gpp:perc_nonveg, precip:tpi, roads_hi
   na.omit() #%>% 
   #dummify()
 
+cont <- steps_scaled %>% select(gpp:power_hii, -c(land_cover_usfs, land_use_usfs, land_cover_usfs_lumped, land_use_usfs_lumped))
+
 #create a correlation matrix
-cor_matrix <- cor(dummy, use="pairwise.complete.obs")
+cor_matrix <- cor(cont, use="pairwise.complete.obs", method = "pearson")
 
 # #identify correlation values above 0.3
 # high_cor <- caret::findCorrelation(cor_matrix, cutoff = .3)
@@ -132,7 +137,7 @@ cor_matrix <- cor(dummy, use="pairwise.complete.obs")
 
 threshold <- 0.5
 
-high_cor_pairs <- which(abs(cor_matrix) > threshold, arr.ind = TRUE)
+high_cor_pairs <- which(abs(cor_matrix) >= threshold, arr.ind = TRUE)
 high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
 
 var1 <- vector()
@@ -151,10 +156,10 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
   #filter(corr < 0.977) %>% 
   arrange(desc(corr))
 
-#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_t5_no_imp_residents_9-18-23.csv")
+#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_t5_no_imp_residents_9-27-23.csv")
 
 #the GGAlly package corrplot is more informative for numeric variables
-ggcorr(steps_scaled %>% 
+ggcorr(steps %>% 
          select(case_, sl_, ta_, gpp:calving_season), label = TRUE)
 
 #VERY slow
