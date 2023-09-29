@@ -9,13 +9,14 @@
 
 ################################ libraries #################################
 library(tidyverse)
-library(glmmTMB)
-library(amt)
-#library(MuMIn)
+#library(glmmTMB)
+#library(amt)
+##library(MuMIn)
 #library(INLA)
 library(beepr)
-library(buildmer)
+#library(buildmer)
 library(INLA)
+library(INLAutils)
 
 #########################################################################
 ##
@@ -23,32 +24,27 @@ library(INLA)
 ##
 ##########################################################################
 
-params <- c("roads_hii",
+params <- c("tree_cover_hansen",
+            "ndvi",
+            "tpi",
+            "northing", 
+            "tri", 
+            "perc_tree_cover",
+            "roads_hii",
             "popdens_hii",
             "landuse_hii",
-            "infra_hii", 
-            "rails_hii", 
-            "power_hii",
-            "tpi",
-            "npp",
-            "perc_tree_cover",
-            "ndvi",
-            "tree_cover_hansen",
-            "northing",
-            "easting",
-            "tri",
-            "precip")
+            "rails_hii",
+            "infra_hii")
 
-quad_params <- c("roads_hii",
-                "tpi",
-                "npp",
+quad_params <- c("tree_cover_hansen",
+                 "ndvi",
+                 #"northing", #not sure that this makes biological sense
+                 #"tri",
                 "perc_tree_cover",
-                "ndvi",
-                "tree_cover_hansen",
-                "northing",
-                "easting",
-                "tri",
-                "precip")
+                #"roads_hii",
+                "popdens_hii" #not sure that this makes biological sense
+                #"landuse_hii" #not sure that this makes biological sense
+                ) 
 
 
 rand_terms <- vector()
@@ -92,7 +88,7 @@ steps_scaled <- steps %>%
 
 #########################################################################
 ##
-## 2. Fit global model without quadratics
+## 2. Fit global model without quadratics (glmmTMB)
 ##
 ##########################################################################
 
@@ -129,7 +125,7 @@ summary(global_fit)
 
 #########################################################################
 ##
-## 2. Fit global model with quadratics
+## 2. Fit global model with quadratics (glmmTMB)
 ##
 ##########################################################################
 
@@ -174,6 +170,10 @@ global_fit_quad <- readRDS("muff_global_fit_quad_res_9-19-23.rds")
 rand_terms_inla <- vector()
 n_indiv = steps_scaled %>% distinct(animal_id) %>% count() %>% pull()
 
+#prior params from https://conservancy.umn.edu/bitstream/handle/11299/204737/Otters_SSF.html?sequence=40#inla-1
+mean.beta <- 0
+prec.beta <- 1e-4 
+
 for(i in 1:length(params)){
   rand_terms_inla[i] <- paste0("f(", paste0("id", i), ", ", params[i], ", ", "values = ", paste0("1:",n_indiv), ", ", 'model = "iid", ', "hyper = list(theta = list(initial = log(1), fixed = FALSE, ", 'prior = "pc.prec", ', "param = c(1, .05))))")
 }
@@ -192,7 +192,7 @@ run_global_inla <- function (dat){
   }
   
   #construct the model formula with quadratic terms
-  form <- as.formula(paste("case_ ~ ",  
+  form <- as.formula(paste("case_ ~ -1 + ",  
                            #fixed effects
                            paste(c(params, quad_terms), collapse = " + "), "+",
                            #random intercept (strata)
@@ -201,12 +201,34 @@ run_global_inla <- function (dat){
                            paste(rand_terms_inla, collapse = " + ")))
   
   #fit the model    
-  fit <- inla(form, family ="poisson", data=dat)
+  fit <-  inla(form, family ="Poisson", data=dat,
+               control.fixed = list(
+               mean = mean.beta,
+               prec = list(default = prec.beta)),
+               control.compute = list(waic=TRUE, dic = TRUE, cpo = TRUE)) #
   
   return(fit)
 }
 
-system.time(inla_fit <- run_global_inla(steps_scaled))
+system.time(inla_fit_global <- run_global_inla(steps_scaled))
+
+p <- autoplot(inla_fit2)
+
+#quadratics that cross 0: landuse_hii, northing, roads_hii, tri
+#cross zero in fit 2: 
+
+inla_fit2 <- run_global_inla(steps_scaled)
+
+
+
+inla_fit$waic$waic
+inla_fit2$waic$waic
+
+INLAstep(
+  faml = "poisson",
+  dataf = steps_scaled,
+  
+)
 
 
 #########################################################################
