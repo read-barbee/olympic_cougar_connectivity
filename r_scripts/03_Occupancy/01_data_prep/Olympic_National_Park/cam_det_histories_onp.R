@@ -3,6 +3,7 @@
 # Author: Read Barbee
 
 # Date:2023-09-11 
+#Last updated: 2023-10-02
 
 # Purpose:
 
@@ -25,8 +26,10 @@ dat <- read_csv("data/Camera_Data/Olympic_National_Park/ONP_fisher_grid_2013-201
                              .default = cougar),
          visit_date = mdy(visit_date)) %>%  #station_id = str_replace(station_id, coll("."), coll("_"))
   mutate(station_id = as.factor(station_id),
+         station = paste0(hex_id, "_", station_num),
          camera_days_good = case_when(camera_days_good > interval ~ interval,
-                                      .default = camera_days_good))
+                                      .default = camera_days_good)) %>% 
+  select(station_id, hex_id, station_num, station, everything(), -rep)
 
 
 #########################################################################
@@ -35,8 +38,7 @@ dat <- read_csv("data/Camera_Data/Olympic_National_Park/ONP_fisher_grid_2013-201
 ##
 ##########################################################################
 
-#this is a hot mess. need to fix it
-
+#this function takes a vector of visit dates and calculates the interval between each. (first is 0)
 visit_int_f <- function(vec){
   visit_int <- vector()
   visit_int[1] = 0
@@ -46,38 +48,65 @@ visit_int_f <- function(vec){
     }
   return(visit_int)
 }
-# #Create columns of binary cougar detection for each visit interval (~14 days each)
-dat2<- dat %>%
-  mutate(station = paste0(hex_id, "_", station_num), .after=station_id) %>%
-  mutate(visit_int = visit_int_f(visit_date), .after = visit_date) %>% View() 
-  #mutate(interval = case_when(interval == 0 ~ ))
-  mutate(prop_int_active = camera_days_good/interval, .after = camera_days_good)
 
-dat2_split <- split(dat2, dat2$station_id)
+
+#split data
+dat_split <- split(dat, dat$station_id)
+
+
+test_dat <- dat_split[[1]]
 
 map_fun <- function(x) {
-  x %>% mutate(visit_num = 1:nrow(x),
-               visit_int = visit_int_f(visit_date), .after = visit_date) %>% 
-    mutate(interval = case_when(interval == 0 ~ visit_int,
-                                .default = interval))
+  x %>% 
+    arrange(visit_date) %>% 
+    mutate(visit_num = 1:nrow(x), .after = visit_date) %>% 
+    #select(-c(visit_date)) %>% 
+    pivot_wider(names_from = visit_num, values_from = c(visit_date, interval:cougar)) #%>% 
+    # mutate(int_start_1 = visit_date_1 - interval_1,
+    #        int_end_1 = visit_date_2,
+    #        int_start_2 = visit_date_2,
+    #        int_end_2 = visit_date_3, .after = interval_3) %>% View()
+
 }
 
-dat2_format <- dat2_split %>% 
+dat_format <- dat_split %>% 
   map(map_fun)
 
-#dat2_format <- bind_rows(dat2_format)
+dat_format <- bind_rows(dat_format) %>% 
+  select(station_id, hex_id, station_num, station:utm_n, cougar_1, cougar_2, cougar_3, cougar_4, everything())
 
-dat_biweekly <-   dat2_format %>% 
-  select(-c(rep, visit_date)) %>% 
-  pivot_wider(names_from = visit_num, values_from =interval:cougar) %>%
-  mutate_all(~ replace(., is.nan(.), NA)) %>% 
-  select(station_id, hex_id, station_num, station, year, utm_e, utm_n, cougar_1:cougar_4, interval_1:photo_count_4)
 
-test <- dat2_format %>% map(format_station)
+#########################################################################
+##
+## 2. Extract raster cell number for each camera station
+##
+##########################################################################
+# Load the terra package
+library(terra)
+library(sf)
 
-test <- bind_rows(test)
+# Load your raster data
+raster <- rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2_asp.tif")
 
-test2 <- test %>% select(-c(contains("problem")))
+temp <- raster[[1]]
+
+# Load your sf object with points for station locations
+sf_points <- dat_format %>% st_as_sf(coords=c("utm_e", "utm_n"), crs = 26910, remove=FALSE) %>% 
+  st_transform(crs = 5070)
+
+# Extract cell numbers for each station location
+xy <- sf_points %>% st_coordinates()
+
+
+#append raster cell id to each station location
+dat_format <- dat_format %>% mutate(cell_id = cellFromXY(temp, xy), .after = utm_n)
+
+#check for multiple cameras in same raster cell
+get_dupes(dat_format, station_id, cell_id)
+
+
+#write_csv(dat_format, "data/Camera_Data/Olympic_National_Park/onp_fisher_2013_2016_cam_act_biweekly.csv")
+
 #########################################################################
 ##
 ## 3. Construct daily camera activity matrix from 2 week interval data

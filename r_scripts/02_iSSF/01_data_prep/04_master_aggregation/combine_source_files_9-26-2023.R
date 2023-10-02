@@ -28,15 +28,15 @@ library(sf)
 ## 1. Import and format source files
 ##
 ##########################################################################
-web_source <- read_csv("data/Location_Data/Source_Files/web_source_5-16-2023.csv", col_types = list(fix_type = col_character(),
+web_source <- read_csv("data/Location_Data/Source_Files/sources/web_source_5-16-2023.csv", col_types = list(fix_type = col_character(),
                                                                                                     collar_id = col_character())) %>% 
   mutate(source = "web")
 
-hist_source <- read_csv("data/Location_Data/Source_Files/hist_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
+hist_source <- read_csv("data/Location_Data/Source_Files/sources/hist_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
                                                                                                      collar_id = col_character())) %>% 
   mutate(source = "historic")
 
-collar_source <- read_csv("data/Location_Data/Source_Files/collar_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
+collar_source <- read_csv("data/Location_Data/Source_Files/sources/collar_source_5-16-2023.csv",col_types = list(fix_type = col_character(),
                                                                                                          collar_id = col_character())) %>% 
   mutate(source = "collar_download")
 
@@ -69,8 +69,8 @@ locs_all <- bind_rows(web_source,
 ##########################################################################
 
 #check for duplicate points
-get_dupes(locs_all, deployment_id, date_time_local, latitude, longitude)
-get_dupes(locs_all, deployment_id, date_time_local)
+get_dupes(locs_all, deployment_id, date_time_utc, latitude, longitude)
+get_dupes(locs_all, deployment_id, date_time_utc)
 
 
 #make sure the location file contains all the deployments in the master deployment list
@@ -79,10 +79,7 @@ locs_all_deps <- locs_all %>% distinct(deployment_id) %>% pull()
 setdiff(deployments_master %>% pull(deployment_id), locs_all_deps)
 setdiff(locs_all_deps, deployments_master %>% pull(deployment_id))
 
-#setdiff(deployments_master %>% pull(deployment_id), trimmed_all %>% distinct(deployment_id) %>% pull())
-
-#total deployments: 171
-
+#create local time column
 locs_all <- locs_all %>% 
   mutate(date_time_local = with_tz(date_time_utc, tzone="US/Pacific"))
 
@@ -143,10 +140,18 @@ trimmed_all <- bind_rows(trimmed_deployments)
 
 trimmed_all <- trimmed_all %>% 
   filter(!(animal_id=="Moxie" & date_time_utc >ymd("2022-04-17"))) %>% #remove Moxie's post-relocation points
-  filter(deployment_id!="Gypsy_87521") #remove Gypsy's post-relocation points
+  filter(deployment_id!="Gypsy_87521") %>%  #remove Gypsy's post-relocation points
+  filter(!(animal_id=="Junior" & date_time_utc <ymd("2014-02-26")))
 
 trimmed_sf <- trimmed_all %>% sf::st_as_sf(coords =c("longitude", "latitude"), crs = 4326, na.fail=FALSE) %>% nest_by(animal_id)
 
+#Inspect tracks to make sure they're trimmed correctly
+
+#inspect by name
+inspect <- trimmed_sf %>% filter(animal_id == "Junior")
+mapview::mapview(inspect$data) 
+
+#inspect by number
 mapview::mapview(trimmed_sf$data[[1]]) #needs geoscreening: 16, 29, 47, 63, 93, 108, 110
 
 
@@ -184,7 +189,7 @@ final <- trimmed_all %>%
   left_join(collar_meta, by=join_by(collar_id))
   
 
-#write_csv(final, "data/Location_Data/Source_Files/locations_master/gps_locs_master_7-11-2023.csv")
+#write_csv(final, "data/Location_Data/Source_Files/locations_master/gps_locs_master_10-02-2023.csv")
 
 
 #create a file detailing the source file for each deployment
