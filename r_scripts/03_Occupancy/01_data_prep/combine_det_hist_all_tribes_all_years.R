@@ -4,7 +4,7 @@
 
 # Date:2023-09-11 
 
-#Last updated: 2023-09-26
+#Last updated: 2023-10-02
 
 # Purpose:
 
@@ -103,7 +103,15 @@ makah_2022 <- read_csv("data/Camera_Data/2022/Makah_2022/makh_2022_det_hist.csv"
   select(station_id, grid_id, station, year, lon, lat, cell_id, everything(), -camera_id)
 
 
-quin_res_2022 <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist.csv") %>% 
+quin_res_2022 <- read_csv("data/Camera_Data/2022/Quin_Res_2022/quin_res_2022_det_hist.csv") %>% 
+  rename(station = station_id,
+         lat = latitude,
+         lon = longitude) %>%
+  unite( "station_id", c(grid_id, station, year), sep = "_", remove = FALSE) %>% 
+  select(-c(camera_id, cameras)) %>% 
+  select(station_id, grid_id, station, year, lon, lat, cell_id, everything())
+
+quin_wyn_2022 <- read_csv("data/Camera_Data/2022/Quin_Wyno_2022/quin_wyno_2022_det_hist.csv") %>% 
   rename(station = station_id,
          lat = latitude,
          lon = longitude) %>%
@@ -122,7 +130,8 @@ data_list <- list(lekt_2019,
                lekt_2022,
                pnptc_2022,
                makah_2022,
-               quin_res_2022)
+               quin_res_2022,
+               quin_wyn_2022)
 
 
 #########################################################################
@@ -215,7 +224,7 @@ occ_dat <- dat_wide %>%
          year = as.factor(year))
 
 
-#write_csv(occ_dat, "data/Camera_Data/master/ocp_occ_dat_9-26-23.csv")
+#write_csv(occ_dat, "data/Camera_Data/master/ocp_occ_dat_10-02-23.csv")
 
 
 
