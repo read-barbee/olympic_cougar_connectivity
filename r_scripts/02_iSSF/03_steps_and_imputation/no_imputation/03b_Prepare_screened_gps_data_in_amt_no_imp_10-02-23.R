@@ -408,17 +408,17 @@ amt_steps <- amt_steps %>%
 ### Aspect ###
 
 #convert aspect from degrees to radians and calculate northing and easting variables with cos and sin transformations respectively
-steps_unscaled <- amt_steps %>% 
-  mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
-  mutate(northing = cos(aspect_rad),
-         easting = sin(aspect_rad), .after=aspect_rad) %>% 
-  rename(aspect_deg = aspect)
+# steps_unscaled <- amt_steps %>% 
+#   mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
+#   mutate(northing = cos(aspect_rad),
+#          easting = sin(aspect_rad), .after=aspect_rad) %>% 
+#   rename(aspect_deg = aspect)
   
 
 ### USFS Land Cover ###
 
 #round mean values for landuse and landcover to nearest integer
-steps_unscaled <- steps_unscaled %>% 
+steps_unscaled <- amt_steps %>% 
   mutate(land_cover_usfs = round(land_cover_usfs),
          land_use_usfs = round(land_use_usfs))
 
@@ -497,11 +497,15 @@ steps_final <- steps_unscaled %>%
          evi,
          tree_cover_hansen,
          perc_tree_cover:perc_nonveg,
+         land_use_usfs,
          land_cover_usfs,
          precip,
          dist_water,
-         elevation:tpi,
-         land_use_usfs,
+         elevation:aspect,
+         northing,
+         easting,
+         tpi,
+         tri,
          roads_hii,
          popdens_hii,
          landuse_hii,

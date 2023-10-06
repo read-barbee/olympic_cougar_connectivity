@@ -14,6 +14,38 @@ library(glmmTMB)
 library(beepr)
 
 
+################################ User defined Parameters ###########################
+
+#List of parameters to compute all subset models for
+params <- c("tree_cover_hansen",
+            "ndvi",
+            "tpi",
+            "northing", 
+            "tri", 
+            "perc_tree_cover",
+            "roads_hii",
+            "popdens_hii",
+            "landuse_hii",
+            #"rails_hii",
+            "infra_hii")
+
+#List of quadratic parameters if necessary 
+# quad_params <- c("roads_hii",
+#                  "tpi",
+#                  "npp",
+#                  "perc_tree_cover",
+#                  "ndvi",
+#                  "tree_cover_hansen",
+#                  "northing",
+#                  "easting",
+#                  "tri",
+#                  "precip")
+
+#set means of prior distributions for fixed effects means and precisions. from https://conservancy.umn.edu/bitstream/handle/11299/204737/Otters_SSF.html?sequence=40#inla-1
+
+mean.beta = 0
+prec.beta = 1e-4
+
 #########################################################################
 ##
 ## 1. Import and format step data
@@ -56,44 +88,16 @@ steps_scaled <- steps %>%
 ##
 ##########################################################################
 
-#List of parameters to compute all subset models for
-params <- c("tree_cover_hansen",
-            "ndvi",
-            "tpi",
-            "northing", 
-            "tri", 
-            "perc_tree_cover",
-            "roads_hii",
-            "popdens_hii",
-            "landuse_hii",
-            #"rails_hii",
-            "infra_hii")
-
-#List of quadratic parameters if necessary 
-# quad_params <- c("roads_hii",
-#                  "tpi",
-#                  "npp",
-#                  "perc_tree_cover",
-#                  "ndvi",
-#                  "tree_cover_hansen",
-#                  "northing",
-#                  "easting",
-#                  "tri",
-#                  "precip")
-
-#set means of prior distributions for fixed effects means and precisions. from https://conservancy.umn.edu/bitstream/handle/11299/204737/Otters_SSF.html?sequence=40#inla-1
-
-mean.beta = 0
-prec.beta = 1e-4
-
-
+#get number of individuals from dataframe
 n_indiv = steps_scaled %>% distinct(animal_id) %>% count() %>% pull()
 
+#create variable names for INLA
 vars <- vector()
 for(i in 1:length(params)){
   vars[i] <- paste0(params[i]," + f(", paste0("id", i), ", ", params[i], ", ", "values = ", paste0("1:",n_indiv), ", ", 'model = "iid", ', "hyper = list(theta = list(initial = log(1), fixed = FALSE, ", 'prior = "pc.prec", ', "param = c(1, .05))))")
 }
 
+#make case numeric instead of logical for INLA
 dat <- steps_scaled %>% mutate(case_ = as.numeric(case_))
 
 #create separate animal_id columns for each random effect
@@ -104,10 +108,11 @@ for(i in 1:length(vars)){
 
 #~7 min for model 18 to run without priors specified
 
-
+#create list of all combinations of variables
 all_comb <- do.call("c", lapply(seq_along(vars), function(i) combn(vars, i, FUN = list)))
 response <- "case_"
 
+#initialize lists to store model formulas and waic scores
 mods <- list()
 waic_list <- list()
 ## Took 32273 seconds (~9hrs) on Legion for 11 covariates (2047 combinations)
@@ -131,57 +136,6 @@ system.time(
 
 
 
-#########################################################################
-##
-## 3. Manual dredge (glmmTMB)
-##
-##########################################################################
-#library(glmmTMB)
-
-
-vars_tmb <- vector()
-for(i in 1:length(params)){
-  vars_tmb[i] <- paste0(params[i]," + (0 + ", params[i], " | animal_id)")
-}
-
-
-all_comb_tmb <- do.call("c", lapply(seq_along(vars_tmb), function(i) combn(vars_tmb, i, FUN = list)))
-
-
-#~ 10 min for 2,097,151 combinations of 21 covariates
-forms <- list()
-
-#Takes about 30 hours for 1023 combinations of 10 covariates
-for (i in 1:length(all_comb_tmb)){
-  var_i <- all_comb_tmb[[i]]
-  forms[[i]] <- as.formula(paste("case_",  paste("-1", "(1|step_id_)", paste(var_i, collapse="+"), sep="+"), sep="~"))
-}
-
-mods_tmb <- list()
-aic_list <- list()
-bic_list <- list()
-system.time(for (i in 1:length(forms)){
-  form <- forms[[i]]
-  mod <- glmmTMB(form, family=poisson, data=steps_scaled, doFit=FALSE)
-  mod$parameters$theta[1] <- log(1e3)
-  map_length <- 1:(length(mod$parameters$theta)-1)
-  mod$mapArg <- list(theta=factor(c(NA, map_length)))
-  
-  fit <- fitTMB(mod)
-  
-  mods_tmb[[i]] <- form
-  aic_list[[i]] <- AIC(fit)
-  bic_list[[i]] <- BIC(fit)
-  
-  print(paste0(i, "/", length(all_comb_tmb)))
-})
-
-#dredge selection table
-dredge_table_tmb <- tibble(model = unlist(as.character(mods_tmb)),
-                           aic = unlist(aic_list),
-                           bic = unlist(bic_list)) %>% 
-  mutate(model = str_remove(model, coll("case_ ~ -1 + (1 | step_id_) + "))) 
-  
 
 # write_csv(dredge_table_tmb, "feature_selection/all_subsets_model_selection_residents_tmb_9-30-23.csv")
 

@@ -4,7 +4,7 @@
 
 # Date:2023-09-11 
 
-#Last updated: 2023-10-02
+#Last updated: 2023-10-05
 
 # Purpose:
 
@@ -12,12 +12,30 @@
 ################################ Libraries #################################
 library(tidyverse)
 library(janitor)
+library(sf)
 
 #########################################################################
 ##
 ## 1. Import and format detection data from each partner and year
 ##
 ##########################################################################
+
+#ONP 2013-2016
+onp_fisher <- read_csv("data/Camera_Data/Olympic_National_Park/onp_fisher_2013_2016_det_hist.csv") 
+
+#get wgs84 coords for park data
+onp_wgs84 <- onp_fisher %>% 
+  st_as_sf(coords=c("utm_e", "utm_n"), crs = 26910) %>% 
+  st_transform(crs = 4326) %>% 
+  st_coordinates()
+  
+onp_fisher <- onp_fisher %>% 
+  unite("station", c(hex_id, station_num)) %>% 
+  unite( "station_id", c(grid_id, station_id), sep = "_", remove = FALSE) %>% 
+  mutate(lon = onp_wgs84[,1],
+         lat = onp_wgs84[,2], .before = utm_e) %>% 
+  select(station_id, grid_id, station, year, lon, lat, cell_id, bait_days_good, snare_days_good, effort_correction_factor, everything(), -utm_e, -utm_n)
+
 
 #2019
 
@@ -119,7 +137,7 @@ quin_wyn_2022 <- read_csv("data/Camera_Data/2022/Quin_Wyno_2022/quin_wyno_2022_d
   select(-c(camera_id, cameras)) %>% 
   select(station_id, grid_id, station, year, lon, lat, cell_id, everything())
 
-
+#combine all data frames into a list
 data_list <- list(lekt_2019, 
                lekt_2020, 
                pnptc_2020, 
@@ -133,6 +151,17 @@ data_list <- list(lekt_2019,
                quin_res_2022,
                quin_wyn_2022)
 
+#add columns to match ocp data list to onp format
+data_list2 <- data_list %>% map(function(dat){dat %>% mutate(
+  bait_days_good = 0,
+  snare_days_good = 0,
+  effort_correction_factor = 0,
+  .after = cell_id)
+  })
+
+#add onp data to the list
+
+data_list_full <- c(data_list2, list(onp_fisher))
 
 #########################################################################
 ##
@@ -141,14 +170,14 @@ data_list <- list(lekt_2019,
 ##########################################################################
 
 #pivot all data frames in list to long form
-dat_pivot <- map(data_list, function(dat) dat %>% 
-                   pivot_longer(cols = -c(station_id:cell_id), names_to = "date", values_to = "value") %>% 
+dat_pivot <- map(data_list_full, function(dat) dat %>% 
+                   pivot_longer(cols = -c(station_id:effort_correction_factor), names_to = "date", values_to = "value") %>% 
                    mutate(date = ymd(date),
                           obs = yday(date), #convert to julian_day
                           #obs = paste0(month(date), "_" ,day(date)),
                           .before = value))
 
-
+dat_pivot <- bind_rows(dat_pivot)
 
 #summarize start and end dates for each year across all grids
 survey_periods <- dat_pivot %>% 
@@ -159,14 +188,13 @@ survey_periods <- dat_pivot %>%
 
 
 #combine rows and pivot wider
-dat_wide <- dat_pivot %>% 
-  bind_rows() %>% 
+dat_wide <- dat_pivot %>%
+  arrange(date) %>% 
   select(-date) %>% 
-  arrange(obs) %>% 
   pivot_wider(names_from = obs, 
               values_from = value,
-              names_sort = TRUE,
-              names_prefix = "d_")
+              #names_sort = TRUE,
+              names_prefix = "d_") %>% View()
 
 
 #########################################################################
@@ -181,32 +209,6 @@ library(sf)
 
 # Load your raster data
 cov_stack <- rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2_asp.tif")
-
-names(cov_stack) <- c("tree_cover_hansen",
-                      "gpp",
-                      "infra_hii",
-                      "landuse_hii",
-                      "land_cover_usfs",
-                      "land_use_usfs",
-                      "npp",
-                      "popdens_hii",
-                      "power_hii",
-                      "precip",
-                      "rails_hii",
-                      "roads_hii",
-                      "elevation",
-                      "slope",
-                      "aspect",
-                      "tri",
-                      "tpi",
-                      "perc_tree_cover",
-                      "perc_nontree_veg",
-                      "perc_nonveg",
-                      "ndvi",
-                      "evi",
-                      "dist_water",
-                      "northing",
-                      "easting")
 
 
 # Load your sf object with points for station locations

@@ -20,7 +20,7 @@ library(scico)
 
 
 #import top model fit
-top_mod <- readRDS("muff_top_global_fit_res_9-19-23.rds")
+top_mod <- readRDS("fitted_models/old/muff_top_global_fit_res_9-19-23.rds")
 
 ########################################################################
 ##
@@ -29,17 +29,16 @@ top_mod <- readRDS("muff_top_global_fit_res_9-19-23.rds")
 ##########################################################################
 
 #no imputation
-steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv") 
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_10-02-2023.csv") %>% mutate(ndvi = ndvi*0.0001)
 
 #locs <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_7-11-2023.csv")
 
-#%>% mutate(ndvi = ndvi*0.0001)
 
 #set all negative elevations to 0 and filter dispersal tracks for post dispersal event
 steps_scaled <- steps %>% 
   filter(dispersal_status=="resident") %>% 
   mutate(elevation = ifelse(elevation < 0, 0, elevation)) %>% 
-  select(-c(aspect_deg, aspect_rad, dispersing:disp_qual)) %>% 
+  select(-c(land_use_usfs, land_cover_usfs, dispersing:disp_qual, season:calving_season)) %>% 
   mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), scale)) %>% 
   mutate(across(c(gpp:perc_nonveg, precip:tpi, roads_hii:power_hii), as.numeric))
 
@@ -50,36 +49,7 @@ steps_scaled <- steps %>%
 ##
 ##########################################################################
 
-cov_stack <- terra::rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2.tif")
-
-names(cov_stack) <- c("tree_cover_hansen",
-                      "gpp",
-                      "infra_hii",
-                      "landuse_hii",
-                      "land_cover_usfs",
-                      "land_use_usfs",
-                      "npp",
-                      "popdens_hii",
-                      "power_hii",
-                      "precip",
-                      "rails_hii",
-                      "roads_hii",
-                      "elevation",
-                      "slope",
-                      "aspect",
-                      "tri",
-                      "tpi",
-                      "perc_tree_cover",
-                      "perc_nontree_veg",
-                      "perc_nonveg",
-                      "ndvi",
-                      "evi",
-                      "dist_water")
-
-#add aspect transformations
-cov_stack$northing <- cos((pi*cov_stack$aspect)/180)
-cov_stack$easting <- sin((pi*cov_stack$aspect)/180)
-#cov_stack$station_id = as.factor("LEKT_Station1")
+cov_stack <- terra::rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2_asp.tif")
 
 #resample cov_stack to lower resolution for simulation
 cov_stack2 <- terra::aggregate(cov_stack, fact=10, cores=5)
@@ -141,12 +111,14 @@ water_polys_start <- water_polys_cropped %>%
   sf::st_union() %>% 
   st_sf()
 
+#create mask layer
 water_barriers <- water_polys_cropped %>% 
   filter(SHAPEAREA >= 2000000) %>% 
   sf::st_union() %>% 
-  st_sf() %>% patches
+  st_sf()
 
-cov_stack_masked <- mask(cov_stack2, water_barriers)
+#mask large water bodies out of cov_stack_raster
+cov_stack_masked <- terra::mask(cov_stack2, water_barriers, inverse = TRUE)
 
 #mapview::mapview(water_polys_cropped)
 
@@ -165,7 +137,7 @@ start_zone<- start_zone$geometry
 #Function to generate n start locations outside of water. way faster than the way Sarah did it
 generate_start_nodes <- function (n, start_zone, barriers)
 {
-  nodes <- st_sample(start_zone, size = n + 100, type = "random", exact = FALSE)
+  nodes <- st_sample(start_zone, size = n + 1000, type = "random", exact = FALSE)
   
   pts<- st_as_sf(nodes, coords = c("X", "Y"), crs = 5070) %>% 
     mutate(intersects = lengths(st_intersects(., barriers)) > 0)
@@ -199,7 +171,7 @@ sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
                         crs = 5070)
     
     
-    k1 <- amt::redistribution_kernel(mod, map = covs, start = start)
+    k1 <- amt::redistribution_kernel(mod, map = cov_stack_masked, start = start)
     
     paths[[i]] <- amt::simulate_path(k1, n.steps = n_steps)
     
@@ -213,7 +185,7 @@ sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
 }
 
 #run simulation
-system.time(paths <- sim_paths_general(5, 2000, mod, cov_stack2, barriers))
+system.time(paths <- sim_paths_general(3, 100, mod, cov_stack_masked, water_polys_start))
 
 #plot simulated paths
 paths_sf <- paths %>% st_as_sf(coords = c("x_", "y_"), crs = 5070)

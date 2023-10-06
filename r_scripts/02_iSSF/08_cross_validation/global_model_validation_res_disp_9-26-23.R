@@ -29,7 +29,7 @@ source("r_scripts/02_iSSF/08_cross_validation/cv_function_glmm_tmb_8-2-23.R")
 
 
 #import screened locations and split into residents and dispersers
-locs <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_9-26-2023.csv")
+locs <- read_csv("data/Location_Data/Source_Files/locations_master/gps_locs_dop_screened_10-02-2023.csv")
 
 #import steps for model predictions
 steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_7-12-2023.csv") 

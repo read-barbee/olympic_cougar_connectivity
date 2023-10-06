@@ -330,6 +330,9 @@ cam_act_final <- camop_fixed  %>% as.data.frame() %>% rownames_to_column("statio
 #write_csv(cam_act_final, "data/Camera_Data/Olympic_National_Park/onp_fisher_2013_2016_cam_act.csv")
 
 
+
+
+
 ################################ Graveyard #################################
 # dat_format2 %>% 
 #   pivot_longer(cols = Problem1_from:Problem4_to, names_to = "problem", values_to = "value")
