@@ -3,6 +3,7 @@
 # Author: Read Barbee
 
 # Date:2023-09-18
+#Last updated: 2023-10-06
 
 # Purpose:
 
@@ -58,13 +59,13 @@ det_covs <- NULL
 ##########################################################################
 
 
-occ_dat <- read_csv("data/Camera_Data/master/ocp_occ_dat_9-22-23.csv") %>% 
+occ_dat <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_10-06-23.csv") %>% 
   mutate(across(station_id_year:year, as.factor)) %>% 
-  mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
-  mutate(northing = cos(aspect_rad),
-         easting = sin(aspect_rad), .after=aspect_rad) %>% 
-  rename(aspect_deg = aspect) %>% 
-  select(-c(aspect_deg, aspect_rad, land_cover_usfs, land_use_usfs))
+  #mutate(aspect_rad = (pi*aspect)/180, .after=aspect) %>%
+  #mutate(northing = cos(aspect_rad),
+         #easting = sin(aspect_rad), .after=aspect_rad) %>% 
+  #rename(aspect_deg = aspect) %>% 
+  #select(-c(aspect_deg, aspect_rad, land_cover_usfs, land_use_usfs))
 
 #scale covariates
 occ_dat_scaled <- occ_dat %>% 
