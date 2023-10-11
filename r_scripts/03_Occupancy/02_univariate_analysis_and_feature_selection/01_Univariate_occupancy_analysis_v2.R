@@ -3,8 +3,18 @@ library(tidyverse)
 library(sf)
 library(ubms)
 
+################################ User-defined Parameters #################################
+
+#  Sampling occasion specs
+survey_period <- "day" 
+number_of_periods <- "5"  # how many days you want each survey to be
 
 
+#########################################################################
+##
+##  1. Import stacked occupancy data
+##
+##########################################################################
 #  Source functions to make occupancy surveys of different lenghts
 source("r_scripts/03_Occupancy/01_data_prep/Utility/sampling_interval_aggregation/original/make_int_fun.R")
 
@@ -13,115 +23,148 @@ load("r_scripts/03_Occupancy/01_data_prep/Utility/sampling_interval_aggregation/
 
 dat2 <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_10-06-23.csv")
 
-dat_form <- dat2 %>% 
+
+#########################################################################
+##
+##  2. Format data for interval function
+##
+##########################################################################
+
+#select necessary columns, calculate effort column, and pivot longer
+days_active_by_cell_year <- dat2 %>% 
+  select(station_id_year:effort_correction_factor, d_1:d_366) %>% 
   pivot_longer(cols = d_1:d_366, names_to = "obs_p", values_to = "obs") %>% 
-  mutate(j_day = str_remove(obs_p, coll("d_")), .after = obs_p) 
+  group_by(cell_id, year) %>% 
+  summarise(cell_year_days_active = sum(is.na(obs)==F))
 
-#for loop to convert julian day into date. Working but VERY slow
-date <- list()
-for(i in 1:nrow(dat_form)){
-  
-  origin_date = ymd(paste0(dat_form$year[i], "-01-01"))
-  
-  day(origin_date) <- as.integer(dat_form$j_day[i])
-  
-  date[[i]] <- origin_date
-  
-  print(paste0(i, "/", nrow(dat_form)))
-}
+dat_form <- dat2 %>% 
+  left_join(days_active_by_cell_year, by = join_by(cell_id, year)) %>% 
+  mutate(cell_year_effort = cell_year_days_active + effort_correction_factor, .after = effort_correction_factor) %>% 
+  select(station_id_year:snare_days_good, cell_year_days_active, effort_correction_factor, cell_year_effort, d_1:d_366) %>% 
+  pivot_longer(cols = d_1:d_366, names_to = "obs_p", values_to = "obs") %>% 
+  mutate(j_day = str_remove(obs_p, coll("d_")), .after = obs_p,
+       daily_eff = case_when(is.na(obs)==TRUE ~ 0,
+                       obs >= 0 ~ 1)) 
 
 
-%>% 
-  mutate(date = year(as.character(year)))
-  mutate(id = 1:nrow(.), .before = station_id_year) %>% 
-  mutate(eff = case_when(is.na(obs)==TRUE ~ 0,
-                         obs == 0 | obs == 1 ~ 1))
 
-#for(i in 1:nrow(.)){as_date(j_day[i]) }
-  
-  test <- dat2$year[1]
-  
-  # case_when(is.na(j_day) ==FALSE ~ as_date(j_day, origin = ymd(paste0(year, "-01-01"))))
-  #as_date(j_day, origin = ymd(paste0(year, "-01-01"))))
-########################################################################
-#  Sampling occasion specs
-survey_period <- "day" 
-number_of_periods <- "5"  # how many days you want each survey to be
+# Create a Julian day vector and year vector
+julian_days <- as.numeric(dat_form$j_day)
+years <- dat_form$year
+
+# Create origin dates for all years
+origin_dates <- ymd(paste0(years, "-01-01"))
+
+# Calculate the date by adding days to origin dates
+dates <- origin_dates + days(julian_days - 1)  # Subtract 1 because Julian days start from 
+
+#add new date column to original dataframe
+dat_form <- dat_form %>% 
+  mutate(date = dates)
+
+
+#########################################################################
+##
+##  2. Format observation matrix for new survey interval
+##
+##########################################################################
 
 # Note date column should be date format:
 # $ date   : Date, format: "2009-05-02" "2009-08-10" "2009-05-14" ...
 
 
-#  Format encounter history 
-#   Observations
+#Select necessary columns
 obs_int <- dat_form %>%
-	dplyr::select(id, year, date, obs) %>% 
+	dplyr::select(station_id_year, cell_id, year, date, obs) %>% 
 	as_tibble()
 
+#Assign each row to an observation interval
 obs_tmp1 <- make_interval(obs_int, date, survey_period, number_of_periods) 
 
+#add column for survey interval
 obs_tmp2 <- obs_tmp1 %>% 
-	dplyr::group_by(id, year) %>% 
+	dplyr::group_by(cell_id, year) %>% 
 	dplyr::mutate(survey_interval = interval - min(interval) + 1) %>%
 	dplyr::ungroup()
 
+#calculate the maximum number of observations for each survey interval
 obs_tmp3 <- obs_tmp2 %>%
-	dplyr::select(id, year, obs, survey_interval) %>%  
-	group_by(survey_interval, id, year) %>% 
+	dplyr::select(station_id_year, cell_id, year, obs, survey_interval) %>%  
+	group_by(survey_interval, cell_id, year) %>% 
 	mutate(obs = max(obs, na.rm = TRUE)) %>%
-	slice(1) %>%
+	slice(1) %>% #get the first row of each group
 	as.data.frame() 	
 
+#pivot from long format to wide format
 w_obs <- obs_tmp3 %>%
-	dplyr::select(id, year, obs, survey_interval) %>%  
-	arrange(survey_interval, id, year) %>%
-	pivot_wider(id_cols = c(id, year),
-		values_from = obs, names_from = survey_interval) %>%
+	#dplyr::select(station_id_year, cell_id, year, obs, survey_interval) %>%  
+	arrange(survey_interval, cell_id, year) %>%
+	pivot_wider(values_from = obs, names_from = survey_interval) %>% 
 	as.data.frame()
 w_obs[w_obs == "-Inf"] <- NA
 
+#id_cols = c(cell_id, year),
+
+#########################################################################
+##
+##  2. Format effort matrix for new survey interval
+##
+##########################################################################
 
 #  Effort/Detection covariate: total number of days all cameras within a cell was operational during each interval
-eff_int <- dat %>%
-	dplyr::select(id, year, date, eff) %>%
+
+#Select necessary columns
+eff_int <- dat_form %>%
+	dplyr::select(station_id_year, cell_id, year, date, daily_eff) %>%
 	as_tibble()
+
+#Assign each row to an observation interval
 eff_tmp1 <- make_interval(eff_int, date, survey_period, number_of_periods) 
+
+#add column for survey interval
 eff_tmp2 <- eff_tmp1 %>% 
-	dplyr::group_by(id, year) %>% 
+	dplyr::group_by(cell_id, year) %>% 
 	dplyr::mutate(survey_interval = interval - min(interval) + 1) %>%
 	dplyr::ungroup()
+
+#calculate the total number of camera_days for each survey interval
 eff_tmp3 <- eff_tmp2 %>%
-	dplyr::select(id, year, eff, survey_interval) %>%  
-	group_by(survey_interval, id, year) %>% 
-	mutate(camdays = sum(eff, na.rm = TRUE)) %>%
+	dplyr::select(station_id_year, cell_id, year, daily_eff, survey_interval) %>%  
+	group_by(survey_interval, cell_id, year) %>% 
+	mutate(camdays = sum(daily_eff, na.rm = TRUE)) %>%
 	slice(1) %>%
 	as.data.frame() 
+
+#pivot from long format to wide format
 w_eff <- eff_tmp3 %>%
-	dplyr::select(id, year, camdays, survey_interval) %>%  
-	group_by(id, survey_interval, year) %>% 
+	dplyr::select(station_id_year, cell_id, year, camdays, survey_interval) %>%  
+	group_by(cell_id, survey_interval, year) %>% 
 	mutate(camdays = sum(camdays, na.rm = TRUE)) %>%
 	slice(1) %>%
 	as.data.frame() %>%
-	arrange(survey_interval, id, year) %>%
-	pivot_wider(id_cols = c(id, year),
-		values_from = camdays, names_from = survey_interval) %>%
+	arrange(survey_interval, cell_id, year) %>%
+	pivot_wider(values_from = camdays, names_from = survey_interval) %>%
 	as.data.frame()
 w_eff[is.na(w_eff)] <- 0	
 
+#id_cols = c(cell_id, year),
 
+#########################################################################
+##
+##  2. Make objects for ubms
+##
+##########################################################################
 
-########################################################################
-#  Make objects for ubms
 nsite <- nrow(w_obs)
 y <- w_obs %>% 
-	dplyr::select(-id, -year) %>% 
+	dplyr::select(-c(station_id_year:year)) %>% 
 	as.matrix()
 
 # Number of surveys detected per site
 summary(rowSums(y, na.rm = TRUE))	
 
 eff <- w_eff %>%
-	dplyr::select(-id, -year) %>% 
+  dplyr::select(-c(station_id_year:year)) %>%
 	as.matrix()
 
 umf_stack <- unmarkedFrameOccu(y = y, 
@@ -271,3 +314,18 @@ f <- fitList(fit5, sq_fit5)
 modSel(f)
 
 
+################################ Graveyard #################################
+
+
+# #for loop to convert julian day into date. Working but VERY slow
+# date <- list()
+# for(i in 1:nrow(dat_form)){
+#   
+#   origin_date = ymd(paste0(dat_form$year[i], "-01-01"))
+#   
+#   day(origin_date) <- as.integer(dat_form$j_day[i])
+#   
+#   date[[i]] <- origin_date
+#   
+#   print(paste0(i, "/", nrow(dat_form)))
+# }
