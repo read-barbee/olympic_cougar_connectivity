@@ -17,7 +17,7 @@ library(terra)
 years <- 2010:2023
 
 # Define an output directory
-output_dir <- "/olympic_cougar_connectivity/data/Habitat_Covariates/annual_covariates/annual_stacks"
+output_dir <- "data/Habitat_Covariates/annual_covariates/annual_stacks"
 
 
 ################################ Helper functions #################################
@@ -81,17 +81,17 @@ make_annual_stack <- function(image_list, year){
 
 ### Static Covariates ###
 
-elevation <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/elevation/elevation.tif")
+elevation <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/elevation.tif")
 
-slope <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/slope/slope.tif")
+slope <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/slope.tif")
 
-aspect <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/aspect/aspect.tif")
+aspect <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/aspect.tif")
 
-mtpi <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/mtpi/mtpi.tif")
+mtpi <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/mtpi.tif")
 
-tri <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/tri/tri.tif")
+tri <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/tri.tif")
 
-dist_water <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_water/dist_water.tif")
+dist_water <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/static/dist_water.tif")
 
 #make stack of static covariates
 static_stack <- c(elevation, slope, aspect, mtpi, tri, dist_water)
@@ -109,85 +109,85 @@ static_stack <- static_stack[[c('elevation', 'slope', 'aspect', 'aspect_northnes
 
 ### Annual Covariates ##
 
-ndvi_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/ndvi_annual_2010_2023/ndvi_annual_2010_2023.tif") %>% 
+ndvi_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/modis_ndvi_annual_2010_2023.tif") %>% 
   band_rename("ndvi_annual", 2010, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-evi_annual <- rast("/Users/tb201494/Desktop/evi_v2/evi_annual_merge.tif") %>% 
+evi_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/modis_evi_annual_2010_2023.tif") %>% 
   band_rename("evi_annual", 2010, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-#evi_test <- terra::clamp(evi_annual, lower = -2, upper = 1, values = TRUE)
-
-gpp_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/gpp_annual_2010_2021/gpp_annual_2010_2021.tif") %>% 
+gpp_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/gpp_annual_2010_2022.tif") %>% 
   band_rename("gpp_annual", 2010, 2022) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-npp_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/npp_annual_2010_2022/npp_annual_2010_2022.tif") %>% 
+npp_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/npp_annual_2010_2022.tif") %>% 
   band_rename("npp_annual", 2010, 2022) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-perc_tree_cov_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/perc_tree_cov_annual_2010_2020/perc_tree_cov_annual_2010_2020.tif")
+perc_tree_cov_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/perc_tree_cov_annual_2010_2020.tif") %>% 
+  mask(., ., maskvalues = -999, updatevalue=NA)
 
-perc_nontree_veg_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/perc_nontree_veg_annual_2010_2020/perc_nontree_veg_annual_2010_2020.tif")
+perc_nontree_veg_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/perc_nontree_veg_annual_2010_2020.tif") %>%
+  mask(., ., maskvalues = -999, updatevalue=NA)
 
-perc_nonveg_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/perc_nonveg_annual_2010_2020/perc_nonveg_annual_2010_2020.tif")
+perc_nonveg_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/perc_nonveg_annual_2010_2020.tif") %>% 
+  mask(., ., maskvalues = -999, updatevalue=NA)
 
-precip_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/precip_annual_2010_2023/precip_annual_2010_2023.tif") %>% 
+precip_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/precip_annual_2010_2023.tif") %>% 
   band_rename("precip_annual", 2010, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-land_cover_usfs_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/land_cover_usfs_annual_2010_2022/land_cover_usfs_annual_2010_2022.tif") %>% 
+land_cover_usfs_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/land_cover_usfs_annual_2010_2022.tif") %>% 
   band_rename("land_cover_usfs_annual", 2010, 2022) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA) %>% 
-  as.factor()
+  mask(., ., maskvalues = -999, updatevalue=NA)
 
-land_use_usfs_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/land_use_usfs_annual_2010_2022/land_use_usfs_annual_2010_2022.tif") %>% 
+land_use_usfs_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/land_use_usfs_annual_2010_2022.tif") %>% 
   band_rename("land_use_usfs_annual", 2010, 2022) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-land_use_change_usfs_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/land_use_change_usfs_annual_2010_2022/land_use_change_usfs_annual_2010_2022.tif") %>% 
+land_use_change_usfs_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/land_use_change_usfs_annual_2010_2022.tif") %>% 
   band_rename("land_use_change_usfs_annual", 2010, 2022) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-popdens_hii_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/popdens_hii_annual_2010_2020/popdens_hii_annual_2010_2020.tif") %>% 
+popdens_hii_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/popdens_hii_annual_2010_2020.tif") %>% 
   band_rename("popdens_hii_annual", 2010, 2020) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA)
+  mask(., ., maskvalues = -999, updatevalue=NA)  * 0.01
 
-landuse_hii_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/landuse_hii_annual_2010_2020/landuse_hii_annual_2010_2020.tif") %>% 
+landuse_hii_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/landuse_hii_annual_2010_2020.tif") %>% 
   band_rename("landuse_hii_annual", 2010, 2020) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA)
+  mask(., ., maskvalues = -999, updatevalue=NA)  * 0.01
 
-infra_hii_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/infra_hii_annual_2010_2020/infra_hii_annual_2010_2020.tif") %>% 
+infra_hii_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/infra_hii_annual_2010_2020.tif") %>% 
   band_rename("infra_hii_annual", 2010, 2020) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA)
+  mask(., ., maskvalues = -999, updatevalue=NA)  * 0.01
 
-roads_hii_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/roads_hii_annual_2010_2022/roads_hii_annual_2010_2022.tif") %>% 
-  subset(12, negate = TRUE) %>% 
+roads_hii_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/roads_hii_annual_2010_2022.tif") %>% 
+  subset(12, negate = TRUE) %>% #remove 2022 layer that the other hii indices don't have
   band_rename("roads_hii_annual", 2010, 2020) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA)
+  mask(., ., maskvalues = -999, updatevalue=NA)  * 0.01
 
-hii_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/hii_annual_2010_2020/hii_annual_2010_2020.tif") %>% 
+hii_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/hii_annual_2010_2020.tif") %>% 
   band_rename("hii_annual", 2010, 2020) %>% 
-  mask(., ., maskvalues = -999, updatevalue=NA)
+  mask(., ., maskvalues = -999, updatevalue=NA)  * 0.01
 
-dist_major_roads_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_major_roads/dist_major_roads_annual_2014_2023.tif") %>% 
+dist_major_roads_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/dist_major_roads_annual_2014_2023.tif") %>% 
   band_rename("dist_major_roads_annual", 2014, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-dist_minor_roads_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_minor_roads/dist_minor_roads_annual_2014_2023.tif") %>% 
+dist_minor_roads_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/dist_minor_roads_annual_2014_2023.tif") %>% 
   band_rename("dist_minor_roads_annual", 2014, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-dist_very_small_roads_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_very_small_roads/dist_very_small_roads_annual_2014_2023.tif") %>% 
+dist_very_small_roads_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/dist_very_small_roads_annual_2014_2023.tif") %>% 
   band_rename("dist_very_small_roads_annual", 2014, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-dist_non_motorized_roads_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_non_motorized_roads/dist_non_motorized_roads_annual_2014_2023.tif") %>% 
+dist_non_motorized_roads_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/dist_non_motorized_roads_annual_2014_2023.tif") %>% 
   band_rename("dist_non_motorized_roads_annual", 2014, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
-dist_all_roads_annual <- rast("/Users/tb201494/Desktop/ocp_annual_covariates/dist_all_roads/dist_all_roads_annual_2014_2023.tif") %>% 
+dist_all_roads_annual <- rast("data/Habitat_Covariates/annual_covariates/raw_collections/annual/dist_all_roads_annual_2014_2023.tif") %>% 
   band_rename("dist_all_roads_annual", 2014, 2023) %>% 
   mask(., ., maskvalues = -999, updatevalue=NA)
 
@@ -246,14 +246,16 @@ for (i in 1:length(annual_stacks)) {
   raster <- annual_stacks[[i]]
   file_name <- paste0("cov_",names(annual_stacks)[i], ".tif")  # Define the file name
   output_path <- file.path(output_dir, file_name)  # Full output path
-  
+
   # Export the spatraster as a TIFF file
-  writeRaster(raster, output_path, format = "GTiff", overwrite = TRUE)
-  
+  writeRaster(raster, output_path, filetype = "GTiff", overwrite = TRUE)
+
   cat("Exported:", output_path, "\n")  # Print the exported file path
 }
 
 
+#output static stack
 
+# writeRaster(static_stack, file.path(output_dir, "static_stack.tif"), filetype = "GTiff", overwrite = TRUE)
 
 
