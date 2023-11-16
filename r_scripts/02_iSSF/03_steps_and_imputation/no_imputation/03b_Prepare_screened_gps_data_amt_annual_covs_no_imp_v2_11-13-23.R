@@ -3,7 +3,7 @@
 # Author: Read Barbee
 
 # Date:2023-07-12 
-#Last updated: 2023-11-13
+#Last updated: 2023-11-15
 
 # Purpose: Prepare screened GPS data in amt to fit iSSFs.
 
@@ -38,7 +38,7 @@ tolerance_mins <- 15
 
 rand_steps <- 10
 
-cov_folder_path <- "data/Habitat_Covariates/annual_covariates/annual_stacks"
+cov_folder_path <- "/Users/tb201494/Desktop/annual_cov_stacks_1km_buffer"
 
 #plan(multisession, workers = 8)
 
@@ -79,7 +79,7 @@ for (tif_file in cov_files) {
 }
 
 #import static stack
-static_stack <- rast("data/Habitat_Covariates/annual_covariates/static_stack.tif")
+static_stack <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_single_tpi.tif")
 
 #date_ranges
 # years_ndvi_evi_precip <- 2010:2023
@@ -253,14 +253,14 @@ indiv_to_remove <- test %>%
 #boundary polygon for random steps
 op_poly <- st_read("data/Habitat_Covariates/study_area_polys/ocp_study_area_poly_wa_only_10-30-23.shp")
 
-#op_poly_buffer <- st_buffer(op_poly, 200)
+op_poly_buffer <- st_buffer(op_poly, 1000)
 
 ## Create non-habitat zones where random steps shouldnt be generated (i.e. water bodies)
 #Import water body polygons
-water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/OP_water_polys_v1.shp") %>% st_transform(crs = 5070)
+water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/op_water_polys_with_salt.shp") %>% st_transform(crs = 5070)
 
 water_polys_cropped <-  water_polys %>%
-  filter(WB_PERIOD_ =="PER" ) %>% #only include permanent water bodies with area > 100 m2
+  filter(WB_PERIOD_ =="PER" | OBJECTID != 1) %>% #only include permanent water bodies with area > 100 m2
   filter(SHAPEAREA >= 100) %>%
   sf::st_crop(op_poly) #crop to study area
 
@@ -268,9 +268,10 @@ water_polys_mask <- water_polys_cropped %>%
   sf::st_union() %>% #dissolve polygons into single vector mask layer
   st_sf()
 
+ocean <- water_polys %>% filter(OBJECTID == 1)
 
 
-#function to convert locatons to steps--turned off water intersection filter
+#function to convert locatons to steps--turned off water intersection filter: way too time consuming if water filter is active
 steps_calc <- function(x) {
   part1 <- x %>% 
     amt::track_resample(rate = hours(resample_int_hours), tolerance = minutes(tolerance_mins)) %>% #resample 
@@ -286,18 +287,21 @@ steps_calc <- function(x) {
   
   #generate 10 times the amount of desired available steps
   part2 <- part1 %>% 
-    amt::random_steps(n_control = rand_steps*10) %>% #generate random steps per used step
+    amt::random_steps(n_control = rand_steps*5) %>% #generate random steps per used step
     #amt::extract_covariates(cov_stack, where = "end") %>% #extract covariates at end of step
     amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
     mutate(unique_step = paste(burst_,step_id_,sep="_"), .before=step_id_) %>%  #add column for unique step id }
     mutate(log_sl_ = log(sl_),    
            cos_ta_ = cos(ta_))
   
-  #determine whether each random step intersects a water body and/or is within the study area
+  #determine whether each random step intersects a water body and/or is within the study area. this is the bottleneck
   part3 <- part2 %>% 
     st_as_sf(coords = c("x2_", "y2_"), crs = 5070, remove=FALSE) %>% 
-    mutate(intersects_water = lengths(st_intersects(., water_polys_mask)) > 0) %>% 
-    mutate(intersects_study_area = lengths(st_intersects(., op_poly)) > 0) %>% 
+    mutate(intersects_freshwater = lengths(st_intersects(., water_polys_mask)) > 0 ) %>% #this is the bottleneck (water polys mask. works with just ocean or just water polys, but not both together)
+    mutate(intersects_ocean = lengths(st_intersects(., ocean)) > 0 ) %>%
+    mutate(intersects_water = case_when(intersects_ocean==FALSE & intersects_freshwater==FALSE ~FALSE,
+                                        .default=TRUE)) %>%
+    mutate(intersects_study_area = lengths(st_intersects(., op_poly)) > 0) %>%  #op_poly_buffer
     dplyr::select(unique_step, t1_, t2_, x2_, y2_, intersects_water, intersects_study_area) %>% 
     as.data.frame() %>% 
     select(-geometry)
@@ -312,7 +316,7 @@ steps_calc <- function(x) {
   #Keep only random steps within the study area that don't intersect water and randomly sample the desired number from those remaining
   tf_split$`FALSE` <- tf_split$`FALSE` %>% 
     filter(intersects_study_area == TRUE) %>% 
-    #filter(intersects_water == FALSE) %>% 
+    filter(intersects_water == FALSE) %>% 
     slice_sample(n = rand_steps, by = unique_step)
   
   #put the used and random steps back together in a single frame
@@ -333,11 +337,12 @@ amt_locs <- locs_nested %>%
 amt_locs$steps <- map(amt_locs$tracks, steps_calc)
 
 #map resulting points and check for errors
-# bind_rows(amt_locs$steps) %>% 
-#   #filter(intersects_water==TRUE) %>% 
-#   #filter(case_==TRUE) %>% 
-#   st_as_sf(coords=c("x2_", "y2_"), crs = 5070) %>% 
-#   mapview::mapview()
+bind_rows(amt_locs$steps) %>%
+  filter(intersects_water==TRUE) %>%
+  #filter(intersects_study_area==FALSE) %>%
+  filter(case_==FALSE) %>%
+  st_as_sf(coords=c("x2_", "y2_"), crs = 5070) %>%
+  mapview::mapview()
 
 #select the relevant columns and unnest the steps column
 amt_steps <- amt_locs %>% 
@@ -398,14 +403,6 @@ amt_steps <- amt_locs %>%
     
     names(steps_split_covs) <- names
     
-    #define function to remove the year suffixes from covariate columns 
-    # remove_year_names <- function(steps_split_covs, start_name, end_name){
-    #   names_to_change <-  names(steps_split_covs)[start_name:end_name]
-    #   names(steps_split_covs)[start_name:end_name]<- substr(names_to_change, 1, nchar(names_to_change) - 5)
-    #   return(steps_split_covs)
-    #   
-    # }
-    
     remove_year_names <- function(steps_split_covs){
       old_names <- names(steps_split_covs)
       new_names <- vector()
@@ -431,18 +428,83 @@ amt_steps <- amt_locs %>%
     return(steps_covs_final)
     
   }
-  
 
   amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_annual_covs, cov_stack_list = cov_stacks)
   
-  
-  #unnest to view missing values
-  #test <- amt_steps_all_covs %>% unnest(cols=c(steps))
-  
-  
 #########################################################################
 ##
-## 9. Extract covariates
+## 9. #try to interpolate values just outside of landmasked extent from GEE products (in progress)
+##
+#########################################################################
+
+
+#replace na values for one covariate with mean of values within 100m radius. Works but very inefficient
+# new_column_vals <- vector()
+# for(i in 1:nrow(test)){
+#   col_name <- "popdens_hii_annual"
+#   column <- test[[col_name]]
+#   year <- test$year[i]
+#   stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
+#   rast <- stack[[str_detect(names(stack), coll(col_name))]]
+#   
+#   if(is.na(column[i])==TRUE){
+#     pt <- st_as_sf(test[i,], coords = c("x2_", "y2_"), crs = 5070)
+#     pt_buff <- st_buffer(pt, 100)
+#     new_column_vals[i] <- terra::extract(rast, pt_buff, fun=function(x){mean(x, na.rm=T)} )[,2]
+#   } else{
+#     new_column_vals[i] <- column[i]
+#   }
+# }
+
+test2 <- test
+
+#trying again
+col_name <- "popdens_hii_annual"
+column <- test[[col_name]]
+year <- test$year[i]
+test2 <- test2 %>% 
+  mutate(na_status = is.na(!!sym(col_name)))
+
+na_split <- split(test2, test2$na_status)
+
+na_only <- na_split$`TRUE` %>% 
+  st_as_sf(coords=c("x2_", "y2_"), crs = 5070, remove = FALSE) %>% 
+  st_buffer(100)
+
+na_year <- split(na_only, na_only$year)
+
+new_vals <- list()
+for(i in 1:length(na_year)){
+year <- names(na_year)[i]
+stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
+rast <- stack[[str_detect(names(stack), coll(col_name))]]
+
+new_vals[i] <- terra::extract(rast, na_year[[i]], fun=function(x){mean(x, na.rm=T)})
+
+
+}
+
+#na_only <- test2 %>% ungroup() %>% filter(is.na(!!sym(col_name))==TRUE)
+
+dat_split <- test2 %>% group_by(na_status, year) %>% group_split()
+
+  
+  #unnest to view missing values
+  test <- amt_steps_all_covs %>% unnest(cols=c(steps))
+  
+  DataExplorer::plot_missing(test)
+  
+  test %>% 
+    filter(is.na(npp_annual)) %>% 
+    filter(case_==TRUE) %>% 
+    st_as_sf(coords=c("x2_", "y2_"), crs = 5070) %>% 
+    mapview()
+  
+#points near bodies of water don't have hii values, npp, gpp, or perc veg values because of coarse landmasking in GEE products
+
+#########################################################################
+##
+## 9. Extract covariates--amt time_var method (redundant)
 ##
 ##########################################################################
   
@@ -636,41 +698,11 @@ steps_unscaled <- steps_unscaled %>%
 #add unique id and rearrange fields to final format
 steps_final <- steps_unscaled %>% 
   mutate(unique_id = 1:nrow(steps_unscaled), .before= animal_id) %>% 
-  select(unique_id:burst_,
-         step_id_,
-         unique_step,
-         case_,
-         x1_:sl_,
-         log_sl_,
-         ta_,
-         cos_ta_,
-         t1_:dt_,
-         gpp,
-         npp,
-         ndvi,
-         evi,
-         tree_cover_hansen,
-         perc_tree_cover:perc_nonveg,
-         land_use_usfs,
-         land_cover_usfs,
-         precip,
-         dist_water,
-         elevation:aspect,
-         northing,
-         easting,
-         tpi,
-         tri,
-         roads_hii,
-         popdens_hii,
-         landuse_hii,
-         infra_hii,
-         rails_hii,
-         power_hii,
-         season:calving_season,
-         dispersing:disp_qual
-         ) %>% 
-  mutate(across(roads_hii:power_hii, round))
+  mutate(across(c(popdens_hii_annual, landuse_hii_annual, infra_hii_annual, roads_hii_annual))*100)
 
+
+#inspect points
+# steps_final %>% filter(is.na(popdens_hii_annual)) %>% filter(case_==TRUE) %>% st_as_sf(coords=c("x2_", "y2_"), crs=5070) %>% mapview()
 
 #scale covariates (optional)
 # amt_steps_scaled <- amt_steps %>%
@@ -678,7 +710,7 @@ steps_final <- steps_unscaled %>%
 #   mutate(across(elev_start:landuse_hii_end, as.numeric))
 
 
-#write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_10-02-2023.csv")
+#write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_annual_cov_11-05-2023.csv")
 
 
 
