@@ -145,6 +145,11 @@ for (tif_file in cov_files) {
 
 #import static stack
 static_stack <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_single_tpi.tif")
+mtpi <- rast("/Users/tb201494/Desktop/1km_buffer/static/mtpi_1km_buffer.tif")
+
+static_stack$mtpi <- mtpi
+
+static_stack <- static_stack[[c("elevation", "slope", "aspect", "aspect_northness", "aspect_eastness", "tpi", "mtpi", "tri", "distance_water")]]
 
 #########################################################################
 ##
@@ -441,7 +446,7 @@ amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_annual_covs, c
 #points near bodies of water don't have hii values, npp, gpp, or perc veg values because of coarse water-masking in GEE products. Solve by interpolation
 
 #list of covariates with coarse water masking to interpolate values for
-covs_to_interp_300m <- c("perc_nonveg", "perc_nontree_veg", "perc_tree_cov", "hii_annual", "roads_hii_annual", "infra_hii_annual", "landuse_hii_annual", "popdens_hii_annual")
+covs_to_interp_300m <- c("perc_nonveg", "perc_nontree_veg", "perc_tree_cov", "hii_annual", "roads_hii_annual", "infra_hii_annual", "landuse_hii_annual", "popdens_hii_annual", "mtpi")
 
 #Interpolate precip, npp and gpp with 600 m radius b/c of coarser scale
 covs_to_interp_600m <- c("precip_annual", "npp_annual", "gpp_annual")
@@ -617,7 +622,7 @@ steps_final <- steps_unscaled %>%
 
 
 #inspect points
-steps_final %>% filter(is.na(popdens_hii_annual)) %>% filter(case_==TRUE) %>% 
+steps_final %>% filter(is.na(popdens_hii_annual)) %>% filter(case_==FALSE) %>% 
   st_as_sf(coords=c("x2_", "y2_"), crs=project_crs, remove=FALSE) %>% mapview()
 
 

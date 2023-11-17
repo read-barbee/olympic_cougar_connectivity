@@ -60,6 +60,45 @@ get_dupes(locs_screened, deployment_id, date_time_utc)
 # dispersals <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_10-02-2023.csv")
 
 
+#barrier polygons
+#Import water body polygons
+water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/op_water_polys_with_salt.shp") %>% st_transform(crs = 5070)
+
+water_polys_cropped <-  water_polys %>%
+  filter(WB_PERIOD_ =="PER" | OBJECTID != 1) %>% #only include permanent water bodies with area > 100 m2
+  filter(SHAPEAREA >= 100) %>%
+  sf::st_crop(op_poly) #crop to study area
+
+water_polys_mask <- water_polys_cropped %>%
+  sf::st_union() %>% #dissolve polygons into single vector mask layer
+  st_sf()
+
+ocean <- water_polys %>% filter(OBJECTID == 1)
+
+#boundary polygon for random steps
+op_poly <- st_read("data/Habitat_Covariates/study_area_polys/ocp_study_area_poly_wa_only_10-30-23.shp")
+
+op_poly_buffer <- st_buffer(op_poly, 100)
+
+#########################################################################
+##
+## 1. Remove locations in water (could do this during screening phase)
+##
+##########################################################################
+# 
+# locs_screened2 <- locs_screened %>% 
+#   st_as_sf(coords=c("lon_utm", "lat_utm"), crs=5070, remove=FALSE) %>% 
+#   mutate(intersects_freshwater = lengths(st_intersects(., water_polys_mask)) > 0 ) %>%
+#   mutate(intersects_ocean = lengths(st_intersects(., ocean)) > 0 ) %>%
+#   mutate(intersects_water = case_when(intersects_ocean==FALSE & intersects_freshwater==FALSE ~FALSE,
+#                                       .default=TRUE)) %>%
+#   mutate(intersects_study_area = lengths(st_intersects(., op_poly_buffer)) > 0) %>% 
+#   filter(intersects_water==TRUE)
+# 
+# mapview(list(locs_screened2, water_polys_mask, ocean))
+  
+
+
 #########################################################################
 ##
 ## 2. Import and format covariate data
@@ -250,26 +289,9 @@ indiv_to_remove <- test %>%
 ##
 #######################################################################
 
-#boundary polygon for random steps
-op_poly <- st_read("data/Habitat_Covariates/study_area_polys/ocp_study_area_poly_wa_only_10-30-23.shp")
 
-op_poly_buffer <- st_buffer(op_poly, 1000)
 
 ## Create non-habitat zones where random steps shouldnt be generated (i.e. water bodies)
-#Import water body polygons
-water_polys <- st_read("data/Habitat_Covariates/washington_water_polygons/op_water_polys_with_salt.shp") %>% st_transform(crs = 5070)
-
-water_polys_cropped <-  water_polys %>%
-  filter(WB_PERIOD_ =="PER" | OBJECTID != 1) %>% #only include permanent water bodies with area > 100 m2
-  filter(SHAPEAREA >= 100) %>%
-  sf::st_crop(op_poly) #crop to study area
-
-water_polys_mask <- water_polys_cropped %>%
-  sf::st_union() %>% #dissolve polygons into single vector mask layer
-  st_sf()
-
-ocean <- water_polys %>% filter(OBJECTID == 1)
-
 
 #function to convert locatons to steps--turned off water intersection filter: way too time consuming if water filter is active
 steps_calc <- function(x) {
@@ -284,45 +306,45 @@ steps_calc <- function(x) {
   if(nrow(part1) < 3){ return(blank)}
   
   else{
-  
-  #generate 10 times the amount of desired available steps
-  part2 <- part1 %>% 
-    amt::random_steps(n_control = rand_steps*5) %>% #generate random steps per used step
-    #amt::extract_covariates(cov_stack, where = "end") %>% #extract covariates at end of step
-    amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
-    mutate(unique_step = paste(burst_,step_id_,sep="_"), .before=step_id_) %>%  #add column for unique step id }
-    mutate(log_sl_ = log(sl_),    
-           cos_ta_ = cos(ta_))
-  
-  #determine whether each random step intersects a water body and/or is within the study area. this is the bottleneck
-  part3 <- part2 %>% 
-    st_as_sf(coords = c("x2_", "y2_"), crs = 5070, remove=FALSE) %>% 
-    mutate(intersects_freshwater = lengths(st_intersects(., water_polys_mask)) > 0 ) %>% #this is the bottleneck (water polys mask. works with just ocean or just water polys, but not both together)
-    mutate(intersects_ocean = lengths(st_intersects(., ocean)) > 0 ) %>%
-    mutate(intersects_water = case_when(intersects_ocean==FALSE & intersects_freshwater==FALSE ~FALSE,
-                                        .default=TRUE)) %>%
-    mutate(intersects_study_area = lengths(st_intersects(., op_poly)) > 0) %>%  #op_poly_buffer
-    dplyr::select(unique_step, t1_, t2_, x2_, y2_, intersects_water, intersects_study_area) %>% 
-    as.data.frame() %>% 
-    select(-geometry)
-  
-  #join intersection status to original step frame
-  part4 <- part2 %>% 
-    left_join(part3, by=join_by(unique_step, t1_, t2_, x2_, y2_))
-  
-  #split used and random steps to filter the random steps by intersection
-  tf_split <- split(part4, part4$case_)
-  
-  #Keep only random steps within the study area that don't intersect water and randomly sample the desired number from those remaining
-  tf_split$`FALSE` <- tf_split$`FALSE` %>% 
-    filter(intersects_study_area == TRUE) %>% 
-    filter(intersects_water == FALSE) %>% 
-    slice_sample(n = rand_steps, by = unique_step)
-  
-  #put the used and random steps back together in a single frame
-  final <- bind_rows(tf_split) %>% arrange(t2_, desc(case_))
-  
-  return(final)
+    
+    #generate 10 times the amount of desired available steps
+    part2 <- part1 %>% 
+      amt::random_steps(n_control = rand_steps*5) %>% #generate random steps per used step
+      #amt::extract_covariates(cov_stack, where = "end") %>% #extract covariates at end of step
+      amt::time_of_day(include.crepuscule = FALSE) %>% #calculate time of day for each step--not working
+      mutate(unique_step = paste(burst_,step_id_,sep="_"), .before=step_id_) %>%  #add column for unique step id }
+      mutate(log_sl_ = log(sl_),    
+             cos_ta_ = cos(ta_))
+    
+    #determine whether each random step intersects a water body and/or is within the study area. this is the bottleneck
+    part3 <- part2 %>% 
+      st_as_sf(coords = c("x2_", "y2_"), crs = 5070, remove=FALSE) %>% 
+      mutate(intersects_freshwater = lengths(st_intersects(., water_polys_mask)) > 0 ) %>% #this is the bottleneck (water polys mask. works with just ocean or just water polys, but not both together)
+      mutate(intersects_ocean = lengths(st_intersects(., ocean)) > 0 ) %>%
+      mutate(intersects_water = case_when(intersects_ocean==FALSE & intersects_freshwater==FALSE ~FALSE,
+                                          .default=TRUE)) %>%
+      mutate(intersects_study_area = lengths(st_intersects(., op_poly_buffer)) > 0) %>%
+      dplyr::select(unique_step, t1_, t2_, x2_, y2_, intersects_water, intersects_study_area) %>% 
+      as.data.frame() %>% 
+      select(-geometry)
+    
+    #join intersection status to original step frame
+    part4 <- part2 %>% 
+      left_join(part3, by=join_by(unique_step, t1_, t2_, x2_, y2_))
+    
+    #split used and random steps to filter the random steps by intersection
+    tf_split <- split(part4, part4$case_)
+    
+    #Keep only random steps within the study area that don't intersect water and randomly sample the desired number from those remaining
+    tf_split$`FALSE` <- tf_split$`FALSE` %>% 
+      filter(intersects_study_area == TRUE) %>% 
+      filter(intersects_water == FALSE) %>% 
+      slice_sample(n = rand_steps, by = unique_step)
+    
+    #put the used and random steps back together in a single frame
+    final <- bind_rows(tf_split) %>% arrange(t2_, desc(case_))
+    
+    return(final)
   }
 }
 
@@ -330,7 +352,7 @@ steps_calc <- function(x) {
 amt_locs <- locs_nested %>% 
   filter(!(animal_id %in% indiv_to_remove)) %>% 
   filter(!(animal_id %in% c("Butch", "Crash", "Freya", "Hera", "Otook_Tom", "Promise")))
-  # %>% filter(!(animal_id %in% c("Belle", "Cato")))
+# %>% filter(!(animal_id %in% c("Belle", "Cato")))
 
 
 #map the step function over each individual and append as a nested dataframe
@@ -349,243 +371,263 @@ amt_steps <- amt_locs %>%
   select(animal_id:dispersal_status,
          steps) %>% 
   filter(length(steps)>0) #%>%  # removes any individuals without enough steps to fit distributions (should only be 1)
-  #unnest(cols=c(steps)) %>% 
-  #relocate(unique_step, .after = step_id_) %>% 
-  #ungroup()
-  
-  # Check global step length and turn angle distributions
-  amt_steps %>%
-    unnest(cols=c(steps)) %>% 
-    #filter(case_==TRUE) %>%
-    filter(sl_ >100 & sl_<20000 ) %>%
-    pull(sl_) %>%
-    hist()
-  
-  amt_steps %>% 
-    unnest(cols=c(steps)) %>%  
-    pull(ta_) %>% 
-    hist()
-  
-  #########################################################################
-  ##
-  ## 11. Extract covariate values
-  ##
-  #######################################################################
-  
-  amt_steps_all_covs <- amt_steps
-  
-  #static covariates
-  amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_covariates, covariates = static_stack)
+#unnest(cols=c(steps)) %>% 
+#relocate(unique_step, .after = step_id_) %>% 
+#ungroup()
 
-  #annual covariates (make sure to adjust column indices)
-  extract_annual_covs <- function(steps, cov_stack_list){
-    #create year column
-    steps2 <- steps %>%
-      mutate(year = as.factor(year(t1_)), .before = t1_)
+# Check global step length and turn angle distributions
+amt_steps %>%
+  unnest(cols=c(steps)) %>% 
+  #filter(case_==TRUE) %>%
+  filter(sl_ >100 & sl_<20000 ) %>%
+  pull(sl_) %>%
+  hist()
+
+amt_steps %>% 
+  unnest(cols=c(steps)) %>%  
+  pull(ta_) %>% 
+  hist()
+
+#########################################################################
+##
+## 11. Extract covariate values
+##
+#######################################################################
+
+amt_steps_all_covs <- amt_steps
+
+#static covariates
+amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_covariates, covariates = static_stack)
+
+#annual covariates (make sure to adjust column indices)
+extract_annual_covs <- function(steps, cov_stack_list){
+  #create year column
+  steps2 <- steps %>%
+    mutate(year = as.factor(year(t1_)), .before = t1_)
+  
+  #split data by year
+  steps_split <- split(steps2, steps2$year)
+  
+  #define function to select the raster stack for the relevant year to extract from and extract the covariates
+  extract_fun <- function(steps_split, year){
+    stack <- cov_stack_list[[paste0("cov_stack_", as.character(year))]]
+    covs <- steps_split %>% extract_covariates(stack)
     
-    #split data by year
-    steps_split <- split(steps2, steps2$year)
-    
-    #define function to select the raster stack for the relevant year to extract from and extract the covariates
-    extract_fun <- function(steps_split, year){
-      stack <- cov_stack_list[[paste0("cov_stack_", as.character(year))]]
-      covs <- steps_split %>% extract_covariates(stack)
-      
-      return(covs)
-    }
-    
-    #apply the extraction function to each year
-    steps_split_covs <- list()
-    for(i in 1:length(steps_split)){
-      names <- names(steps_split)
-      steps_split_covs[[i]] <- extract_fun(steps_split[[i]], names[i])
-    }
-    
-    names(steps_split_covs) <- names
-    
-    remove_year_names <- function(steps_split_covs){
-      old_names <- names(steps_split_covs)
-      new_names <- vector()
-      for(i in 1:length(old_names)){
-        if(str_detect(old_names[i], coll("20"))){
-          new_names[i] <- substr(old_names[i], 1, nchar(old_names[i]) - 5)
-        } else{
-          new_names[i] <- old_names[i]
-        }
-      }
-      
-      names(steps_split_covs) <- new_names
-      
-      return(steps_split_covs)
-    }
-    
-    #apply renaming function
-    covs_renamed <- map(steps_split_covs, remove_year_names)
-    
-    #bind all years together 
-    steps_covs_final <- bind_rows(covs_renamed)
-    
-    return(steps_covs_final)
-    
+    return(covs)
   }
-
-  amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_annual_covs, cov_stack_list = cov_stacks)
   
+  #apply the extraction function to each year
+  steps_split_covs <- list()
+  for(i in 1:length(steps_split)){
+    names <- names(steps_split)
+    steps_split_covs[[i]] <- extract_fun(steps_split[[i]], names[i])
+  }
+  
+  names(steps_split_covs) <- names
+  
+  remove_year_names <- function(steps_split_covs){
+    old_names <- names(steps_split_covs)
+    new_names <- vector()
+    for(i in 1:length(old_names)){
+      if(str_detect(old_names[i], coll("20"))){
+        new_names[i] <- substr(old_names[i], 1, nchar(old_names[i]) - 5)
+      } else{
+        new_names[i] <- old_names[i]
+      }
+    }
+    
+    names(steps_split_covs) <- new_names
+    
+    return(steps_split_covs)
+  }
+  
+  #apply renaming function
+  covs_renamed <- map(steps_split_covs, remove_year_names)
+  
+  #bind all years together 
+  steps_covs_final <- bind_rows(covs_renamed)
+  
+  return(steps_covs_final)
+  
+}
+
+amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_annual_covs, cov_stack_list = cov_stacks)
+
 #########################################################################
 ##
 ## 9. #try to interpolate values just outside of landmasked extent from GEE products (in progress)
 ##
 #########################################################################
 
+#points near bodies of water don't have hii values, npp, gpp, or perc veg values because of coarse landmasking in GEE products. solve by interpolation
 
-#replace na values for one covariate with mean of values within 100m radius. Works but very inefficient
-# new_column_vals <- vector()
-# for(i in 1:nrow(test)){
-#   col_name <- "popdens_hii_annual"
-#   column <- test[[col_name]]
-#   year <- test$year[i]
-#   stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
-#   rast <- stack[[str_detect(names(stack), coll(col_name))]]
-#   
-#   if(is.na(column[i])==TRUE){
-#     pt <- st_as_sf(test[i,], coords = c("x2_", "y2_"), crs = 5070)
-#     pt_buff <- st_buffer(pt, 100)
-#     new_column_vals[i] <- terra::extract(rast, pt_buff, fun=function(x){mean(x, na.rm=T)} )[,2]
-#   } else{
-#     new_column_vals[i] <- column[i]
-#   }
-# }
+steps_unnest <- amt_steps_all_covs %>% 
+  unnest(cols=c(steps)) %>% 
+  ungroup() %>% 
+  filter(intersects_study_area==TRUE)
 
-test2 <- test
+# map_test <- test %>% filter(intersects_study_area==FALSE) %>% st_as_sf(coords=c("x2_", "y2_"), crs=5070)
+# 
+# mapview(list(op_poly_buffer, map_test))
 
-#trying again
-col_name <- "popdens_hii_annual"
-column <- test[[col_name]]
-year <- test$year[i]
-test2 <- test2 %>% 
-  mutate(na_status = is.na(!!sym(col_name)))
+covs_to_interp_300m <- c("perc_nonveg", "perc_nontree_veg", "perc_tree_cov", "npp_annual", "gpp_annual", "hii_annual", "roads_hii_annual", "infra_hii_annual", "landuse_hii_annual", "popdens_hii_annual")
 
-na_split <- split(test2, test2$na_status)
+interp_cov_vals <- function(cov, df, buffer_size){
 
+#prep data and add na status column
+col_name <- cov 
+column <- df[[col_name]] 
+df2 <- df %>% 
+  mutate(na_status = is.na(!!sym(col_name))) 
+
+#split data by na_status
+na_split <- split(df2, df2$na_status)
+
+#select the na values for interpolation
 na_only <- na_split$`TRUE` %>% 
   st_as_sf(coords=c("x2_", "y2_"), crs = 5070, remove = FALSE) %>% 
-  st_buffer(100)
+  st_buffer(buffer_size)
 
+#split na_values by year
 na_year <- split(na_only, na_only$year)
 
-new_vals <- list()
+#interpolate missing values as average of cells within buffer radius for each year
 for(i in 1:length(na_year)){
-year <- names(na_year)[i]
-stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
-rast <- stack[[str_detect(names(stack), coll(col_name))]]
-
-new_vals[i] <- terra::extract(rast, na_year[[i]], fun=function(x){mean(x, na.rm=T)})
-
-
+ if(nrow(na_year[[i]])>0){
+  year <- names(na_year)[i]
+  stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
+  rast <- stack[[str_detect(names(stack), coll(col_name))]]
+  
+  
+  na_year[[i]][[col_name]] <- terra::extract(rast, na_year[[i]], fun=function(x){mean(x, na.rm=T)})[,2]
+  na_year[[i]][[col_name]] <- ifelse(is.nan(na_year[[i]][[col_name]]), NA, na_year[[i]][[col_name]])
+  }
 }
 
-#na_only <- test2 %>% ungroup() %>% filter(is.na(!!sym(col_name))==TRUE)
+#substitute interpolated values and recombine datafarme
+na_only_sub <- bind_rows(na_year) %>% as.data.frame() %>% select(-geometry)
+na_split$`TRUE` <- na_only_sub
+out <- bind_rows(na_split) %>% arrange(animal_id, t2_, desc(case_))
 
-dat_split <- test2 %>% group_by(na_status, year) %>% group_split()
+return(out)
+}
 
-  
-  #unnest to view missing values
-  test <- amt_steps_all_covs %>% unnest(cols=c(steps))
-  
-  DataExplorer::plot_missing(test)
-  
-  test %>% 
-    filter(is.na(npp_annual)) %>% 
-    filter(case_==TRUE) %>% 
-    st_as_sf(coords=c("x2_", "y2_"), crs = 5070) %>% 
-    mapview()
-  
-#points near bodies of water don't have hii values, npp, gpp, or perc veg values because of coarse landmasking in GEE products
+steps_interp <- steps_unnest
+
+#~13 min
+for(i in 1:length(covs_to_interp_300m)){
+  steps_interp <- interp_cov_vals(covs_to_interp_300m[i], df = steps_interp, buffer_size = 300)
+print(paste0(i, "/", length(covs_to_interp_300m)))
+}
+
+#interp precip, npp and gpp with different buffer b/c of different scale
+covs_to_interp_600m <- c("precip_annual", "npp_annual", "gpp_annual")
+
+for(i in 1:length(covs_to_interp_600m)){
+  steps_interp<- interp_cov_vals(covs_to_interp_600m[i], df = steps_interp, buffer_size = 600)
+  print(paste0(i, "/", length(covs_to_interp_600m)))
+}
+
+#Check remaining NA points
+#DataExplorer::plot_missing(test3)
+# pts_out <- test3 %>% filter(is.na(popdens_hii_annual))
+# write_csv(pts_out, "pts_out.csv")
+
+steps_interp<- steps_interp %>% select(-na_status)
+
+
+
+#~13 min: mapping doesn't work because it prodcues a list
+#test2 <- map(covs_to_interp, interp_cov_vals, df=test, buffer_size = 300)
+
+# map_rast <- raster::raster(cov_stacks[[5]][[12]])
+# map_pts <- bind_rows(na_year) %>% filter(is.na(!!sym(col_name))==T)
+# mapview(map_rast) + map_pts
 
 #########################################################################
 ##
 ## 9. Extract covariates--amt time_var method (redundant)
 ##
 ##########################################################################
-  
-  #REDUNDANT
-  
-  #amt_steps$steps <- map(amt_steps$steps, extract_covariates, covariates = static_stack)
-  
-  # test_steps <- amt_steps$steps[[15]]
-  # test_steps2 <- test_steps
-  # 
-  # extract_annual_covs <- function(steps){
-  #   
-  #   stack_names <- names(cov_stacks_ts)
-  #   
-  #   for(i in 1:length(cov_stacks_ts)){
-  #     steps <- extract_covariates_var_time(steps,  covariates = cov_stacks_ts[[i]],
-  #                                          when = "any", 
-  #                                          where = "end",
-  #                                          max_time = years(4),
-  #                                          name_covar = stack_names[i])
-  #   }
-  #   return(steps)
-  # }
-  # 
-  # 
-  # step_map_test <- map(amt_steps$steps, extract_annual_covs)
-  # 
-  # 
-  # 
-  # for(i in 1:length(cov_stacks_ts)){
-  #   if(max(time(cov_stacks_ts[[i]])))
-  #   test_steps2 <- extract_covariates_var_time(test_steps2,  covariates = cov_stacks_ts[[i]],
-  #                                              when = "any", 
-  #                                              where = "end",
-  #                                              max_time = years(4),
-  #                                              name_covar = stack_names[i])
-  # }
-  
+
+#REDUNDANT
+
+#amt_steps$steps <- map(amt_steps$steps, extract_covariates, covariates = static_stack)
+
+# test_steps <- amt_steps$steps[[15]]
+# test_steps2 <- test_steps
+# 
+# extract_annual_covs <- function(steps){
+#   
+#   stack_names <- names(cov_stacks_ts)
+#   
+#   for(i in 1:length(cov_stacks_ts)){
+#     steps <- extract_covariates_var_time(steps,  covariates = cov_stacks_ts[[i]],
+#                                          when = "any", 
+#                                          where = "end",
+#                                          max_time = years(4),
+#                                          name_covar = stack_names[i])
+#   }
+#   return(steps)
+# }
+# 
+# 
+# step_map_test <- map(amt_steps$steps, extract_annual_covs)
+# 
+# 
+# 
+# for(i in 1:length(cov_stacks_ts)){
+#   if(max(time(cov_stacks_ts[[i]])))
+#   test_steps2 <- extract_covariates_var_time(test_steps2,  covariates = cov_stacks_ts[[i]],
+#                                              when = "any", 
+#                                              where = "end",
+#                                              max_time = years(4),
+#                                              name_covar = stack_names[i])
+# }
+
 #########################################################################
 ##
 ## 9. Create column indicating which steps were during active dispersals
 ##
 ##########################################################################
-  #Import dispersal dates
-  dispersal_dates <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_reduced_10-02-2023.csv") %>% 
-    mutate(disp_date_nsd = mdy(disp_date_nsd)) %>% select(-sex)
-  
-  #Join dispersal dates to locs_nested by animal name
- amt_steps_all_covs <- amt_steps_all_covs %>% 
-    left_join(dispersal_dates, by=join_by(animal_id))
-  
-  #trim dispersal tracks to dispersal dates
-  # for (i in 1:nrow(locs_nested)){
-  #   if(!is.na(locs_nested$disp_date_nsd[i])){
-  #     locs_nested$tracks[[i]] <- locs_nested$tracks[[i]] %>% filter(t_ >= locs_nested$disp_date_nsd[i])
-  #   }
-  # }
-  
-  #Create column identifying locations during active dispersal ***
-  for (i in 1:nrow(amt_steps_all_covs)){
-    if(!is.na(amt_steps_all_covs$disp_date_nsd[i])){
-      amt_steps_all_covs$steps[[i]] <- amt_steps_all_covs$steps[[i]] %>%
-        mutate(dispersing = case_when(t2_ >= amt_steps_all_covs$disp_date_nsd[i] ~ TRUE,
-                                      t2_ < amt_steps_all_covs$disp_date_nsd[i] ~ FALSE))
-    }
+#Import dispersal dates
+dispersal_dates <- read_csv("data/Location_Data/Metadata/From_Teams/Formatted_for_R/Dispersals/dispersals_master_reduced_10-02-2023.csv") %>% 
+  mutate(disp_date_nsd = mdy(disp_date_nsd)) %>% select(-sex)
+
+#Join dispersal dates to locs_nested by animal name
+amt_steps_all_covs_interp <- steps_interp %>% 
+  left_join(dispersal_dates, by=join_by(animal_id))
+
+#trim dispersal tracks to dispersal dates
+# for (i in 1:nrow(locs_nested)){
+#   if(!is.na(locs_nested$disp_date_nsd[i])){
+#     locs_nested$tracks[[i]] <- locs_nested$tracks[[i]] %>% filter(t_ >= locs_nested$disp_date_nsd[i])
+#   }
+# }
+
+#Create column identifying locations during active dispersal ***
+for (i in 1:nrow(amt_steps_all_covs_interp)){
+  if(!is.na(amt_steps_all_covs_interp$disp_date_nsd[i])){
+    amt_steps_all_covs_interp$steps[[i]] <- amt_steps_all_covs_interp$steps[[i]] %>%
+      mutate(dispersing = case_when(t2_ >= amt_steps_all_covs_interp$disp_date_nsd[i] ~ TRUE,
+                                    t2_ < amt_steps_all_covs_interp$disp_date_nsd[i] ~ FALSE))
   }
-  
-  #make sure it worked
-  # locs_nested %>% filter(dispersal_status=="disperser") %>% 
-  #   select(animal_id, tracks, disp_date_nsd) %>% 
-  #   unnest(cols=tracks) %>% 
-  #   group_by(animal_id) %>% 
-  #   summarize(min = min(t_))
-  # 
- 
- #clean up
- amt_steps_all_covs <- amt_steps_all_covs %>% 
- unnest(cols=c(steps)) %>% 
- relocate(unique_step, .after = step_id_) %>% 
- ungroup()
- 
+}
+
+#make sure it worked
+# locs_nested %>% filter(dispersal_status=="disperser") %>% 
+#   select(animal_id, tracks, disp_date_nsd) %>% 
+#   unnest(cols=tracks) %>% 
+#   group_by(animal_id) %>% 
+#   summarize(min = min(t_))
+# 
+
+#clean up
+amt_steps_all_covs_interp <- amt_steps_all_covs_interp %>% 
+  unnest(cols=c(steps)) %>% 
+  relocate(unique_step, .after = step_id_) %>% 
+  ungroup()
+
 #########################################################################
 ##
 ## 10. Remove individuals with too little data for inference
@@ -594,7 +636,7 @@ dat_split <- test2 %>% group_by(na_status, year) %>% group_split()
 
 #Remove individuals with < 30steps and/or < 20 days of steps: removes 8 individuals. not sure yet if this is necessary
 
-removal_list <- amt_steps_all_covs %>% 
+removal_list <- amt_steps_all_covs_interp %>% 
   group_by(animal_id) %>%
   mutate(date_range=interval(start=min(t1_), end=max(t2_)),
          step_days = as.duration(date_range)/ddays(1)) %>%
@@ -603,9 +645,9 @@ removal_list <- amt_steps_all_covs %>%
   #filter(n_steps<=30) %>% 
   #filter(step_days <= 30)
   filter(n_steps<30 | step_days <= 20) %>%
-pull(animal_id)
+  pull(animal_id)
 
-amt_steps_all_covs <- amt_steps_all_covs %>%
+amt_steps_all_covs_interp <- amt_steps_all_covs_interp %>%
   filter(!(animal_id %in% removal_list))
 
 
@@ -623,47 +665,47 @@ amt_steps_all_covs <- amt_steps_all_covs %>%
 #   mutate(northing = cos(aspect_rad),
 #          easting = sin(aspect_rad), .after=aspect_rad) %>% 
 #   rename(aspect_deg = aspect)
-  
+
 
 ### USFS Land Cover ###
 
 #round mean values for landuse and landcover to nearest integer
-steps_unscaled <- amt_steps_all_covs %>% 
+steps_unscaled <- amt_steps_all_covs_interp %>% 
   mutate(land_cover_usfs_annual = round(land_cover_usfs_annual),
          land_use_usfs_annual = round(land_use_usfs_annual))
 
 #define land cover categories
-steps_unscaled <- steps_unscaled %>% 
-  mutate(land_cover_usfs_annual_str = case_when(land_cover_usfs_annual == 1 ~ "trees",
-                                            land_cover_usfs_annual== 2 ~ "tall_trees_shrubs",
-                                            land_cover_usfs_annual == 3 ~ "tree_shrub_mix",
-                                            land_cover_usfs_annual == 4 ~ "gfh_tree_mix",
-                                            land_cover_usfs_annual == 5 ~ "barren_tree_mix",
-                                            land_cover_usfs_annual == 6 ~ "tall_shrubs",
-                                            land_cover_usfs_annual == 7 ~ "shrubs",
-                                            land_cover_usfs_annual == 8 ~ "gfh_shrub_mix",
-                                            land_cover_usfs_annual == 9 ~ "barren_shrub_mix",
-                                            land_cover_usfs_annual == 10 ~ "gfh",
-                                            land_cover_usfs_annual == 11 ~ "barren_gfh_mix",
-                                            land_cover_usfs_annual == 12 ~ "barren_impervious",
-                                            land_cover_usfs_annual == 13 ~ "snow_ice",
-                                            land_cover_usfs_annual == 14 ~ "water",
-                                            land_cover_usfs_annual == 15 ~ NA_character_),
-         .after=land_cover_usfs_annual)
+# steps_unscaled <- steps_unscaled %>% 
+#   mutate(land_cover_usfs_annual_str = case_when(land_cover_usfs_annual == 1 ~ "trees",
+#                                                 land_cover_usfs_annual== 2 ~ "tall_trees_shrubs",
+#                                                 land_cover_usfs_annual == 3 ~ "tree_shrub_mix",
+#                                                 land_cover_usfs_annual == 4 ~ "gfh_tree_mix",
+#                                                 land_cover_usfs_annual == 5 ~ "barren_tree_mix",
+#                                                 land_cover_usfs_annual == 6 ~ "tall_shrubs",
+#                                                 land_cover_usfs_annual == 7 ~ "shrubs",
+#                                                 land_cover_usfs_annual == 8 ~ "gfh_shrub_mix",
+#                                                 land_cover_usfs_annual == 9 ~ "barren_shrub_mix",
+#                                                 land_cover_usfs_annual == 10 ~ "gfh",
+#                                                 land_cover_usfs_annual == 11 ~ "barren_gfh_mix",
+#                                                 land_cover_usfs_annual == 12 ~ "barren_impervious",
+#                                                 land_cover_usfs_annual == 13 ~ "snow_ice",
+#                                                 land_cover_usfs_annual == 14 ~ "water",
+#                                                 land_cover_usfs_annual == 15 ~ NA_character_),
+#          .after=land_cover_usfs_annual)
 
 
 ### USFS Land Use ###
 
 #define land use categories
-steps_unscaled <- steps_unscaled %>% 
-  mutate(land_use_usfs_annual_str = case_when(land_use_usfs_annual == 1 ~ "agriculture",
-                                              land_use_usfs_annual == 2 ~ "developed",
-                                              land_use_usfs_annual == 3 ~ "forest",
-                                              land_use_usfs_annual == 4 ~ "non_forest_wetland",
-                                              land_use_usfs_annual == 5 ~ "other",
-                                              land_use_usfs_annual == 6 ~ "rangeland_pasture",
-                                              land_use_usfs_annual == 7 ~ NA_character_),
-         .after=land_use_usfs_annual)
+# steps_unscaled <- steps_unscaled %>% 
+#   mutate(land_use_usfs_annual_str = case_when(land_use_usfs_annual == 1 ~ "agriculture",
+#                                               land_use_usfs_annual == 2 ~ "developed",
+#                                               land_use_usfs_annual == 3 ~ "forest",
+#                                               land_use_usfs_annual == 4 ~ "non_forest_wetland",
+#                                               land_use_usfs_annual == 5 ~ "other",
+#                                               land_use_usfs_annual == 6 ~ "rangeland_pasture",
+#                                               land_use_usfs_annual == 7 ~ NA_character_),
+#          .after=land_use_usfs_annual)
 
 
 ######### Add Season Covariates ###
@@ -716,6 +758,24 @@ steps_final <- steps_unscaled %>%
 
 
 ################################ GRAVEYARD #################################
+
+#replace na values for one covariate with mean of values within 100m radius. Works but very inefficient
+# new_column_vals <- vector()
+# for(i in 1:nrow(test)){
+#   col_name <- "popdens_hii_annual"
+#   column <- test[[col_name]]
+#   year <- test$year[i]
+#   stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
+#   rast <- stack[[str_detect(names(stack), coll(col_name))]]
+#   
+#   if(is.na(column[i])==TRUE){
+#     pt <- st_as_sf(test[i,], coords = c("x2_", "y2_"), crs = 5070)
+#     pt_buff <- st_buffer(pt, 100)
+#     new_column_vals[i] <- terra::extract(rast, pt_buff, fun=function(x){mean(x, na.rm=T)} )[,2]
+#   } else{
+#     new_column_vals[i] <- column[i]
+#   }
+# }
 
 
 # extract_annual_covs <- function(steps, cov_stack_list){
