@@ -73,6 +73,15 @@ steps_filt <- steps %>%
                                                  .default = land_use_change_usfs_annual)) %>% 
   select(-c(disp_qual:dispersing))
 
+
+#inspect steps
+# steps_filt %>% 
+#   #filter(intersects_water==TRUE) %>% 
+#   filter(intersects_study_area==FALSE) %>% 
+#   #filter(case_==FALSE) %>%
+#   sf::st_as_sf(coords=c("x2_", "y2_"), crs=5070) %>% 
+#   mapview::mapview()
+
 #########################################################################
 ##
 ## 2. Check covariate distributions
@@ -92,6 +101,9 @@ plot_histogram(steps_filt %>% select(sl_, ta_, elevation:dist_all_roads_annual))
 
 #continuous histograms used
 plot_histogram(steps_filt %>% select(case_, sl_, ta_, elevation:dist_all_roads_annual) %>% filter(case_==TRUE))
+
+#continuous histograms unused
+plot_histogram(steps_filt %>% select(case_, sl_, ta_, elevation:dist_all_roads_annual) %>% filter(case_==FALSE))
 
 #categorical bar plots
 plot_bar(steps_filt %>% select(land_cover_usfs_annual, land_use_usfs_annual, land_use_change_usfs_annual))
@@ -155,7 +167,7 @@ cont <- steps_scaled %>%
 cor_matrix <- cor(cont, use="pairwise.complete.obs", method = "pearson")
 
 # Set correlation threshold
-threshold <- 0.5
+threshold <- 0.0
 
 high_cor_pairs <- which(abs(cor_matrix) >= threshold, arr.ind = TRUE)
 high_cor_pairs <- high_cor_pairs[high_cor_pairs[, 1] != high_cor_pairs[, 2], ]
@@ -176,7 +188,14 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
   #filter(corr < 0.977) %>% 
   arrange(desc(corr))
 
-#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_no_imp_all_indiv_annual_cov_11-16-23.csv")
+for(i in 1:length(cor_dat)){
+  
+}
+
+rows_to_remove <- seq(from = 2, to = nrow(cor_dat), by = 2)
+cor_dat_no_dupes <- cor_dat[-rows_to_remove, ]
+
+#write_csv(cor_dat_no_dupes, "feature_selection/pairwise_cov_corr_no_imp_all_indiv_annual_cov_11-20-23.csv")
 
 #the GGAlly package corrplot is more informative for numeric variables
 ggcorr(steps_scaled %>% 

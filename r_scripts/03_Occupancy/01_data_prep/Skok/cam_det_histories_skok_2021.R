@@ -124,11 +124,25 @@ cam_act <- cam_act %>%
   pivot_wider(names_from = date, values_from = cam_status)
 
 
+#Cam 68 detections supplied by Bethany as separate file
+cougar_det_cam68 <- read_csv("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Camera_Data/2021/Skok_2021/Skok.2021.CAM68.Check2.csv") %>% 
+  clean_names() %>% 
+  select(capture_date_local, capture_time_local, species) %>% 
+  mutate(timestamp =  mdy_hms(paste(capture_date_local, capture_time_local)), # tz = "US/Pacific"
+         date = mdy(capture_date_local),
+         time = hms(capture_time_local),
+         camera_id = "CAM68") %>% 
+  filter(species =="Cougar") %>% 
+  select(camera_id, date, time, timestamp)
+  
+
+
 cougar_det <- read_csv("data/Camera_Data/2021/Skok_2021/skok_puma_detections_2021_formatted.csv") %>% 
   select(camera_id, date, time) %>% 
   mutate(timestamp = mdy_hms(paste(date, time)),
          date = mdy(date),
-         time = hms(time)) 
+         time = hms(time)) %>% 
+  bind_rows(cougar_det_cam68)
 
 
 cam_to_stat <- cam_act %>% select(station_id, camera_id)
@@ -147,7 +161,7 @@ library(terra)
 library(sf)
 
 # Load your raster data
-raster <- rast("data/Habitat_Covariates/puma_cov_stack_v2/tifs/puma_cov_stack_v2.tif")
+raster <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_single_tpi.tif")
 
 temp <- raster[[1]]
 
@@ -257,10 +271,10 @@ effort_matrix <- det_hist_full %>%
          year = "2021", .before=station_id)
 
 
-
+# 
 # write_csv(det_hist_binary, "data/Camera_Data/2021/Skok_2021/skok_2021_det_hist.csv")
-# write_csv(det_hist_counts, "data/Camera_Data/2021/Skok_2021/skok_2020_det_hist_counts.csv")
-# write_csv(det_hist_full, "data/Camera_Data/2021/Skok_2021/skok_2020_det_hist_long.csv")
+# write_csv(det_hist_counts, "data/Camera_Data/2021/Skok_2021/skok_2021_det_hist_counts.csv")
+# write_csv(det_hist_full, "data/Camera_Data/2021/Skok_2021/skok_2021_det_hist_long.csv")
 
 
 

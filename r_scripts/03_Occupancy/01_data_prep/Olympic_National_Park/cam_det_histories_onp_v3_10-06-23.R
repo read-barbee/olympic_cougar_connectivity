@@ -184,6 +184,156 @@ format_station <- function(station_dat){
   return(station_dat_formatted)
 }
 
+
+
+format_station_bait <- function(station_dat){
+  
+  round_1 <- station_dat %>% 
+    mutate(problem = case_when(interval != bait_days_good ~ TRUE,
+                               interval == bait_days_good ~ FALSE), .after = bait_days_good) %>% 
+    mutate(int_start = visit_date - days(interval), .before = visit_date) %>% 
+    mutate(problem_days = interval - bait_days_good, .after = camera_days_good) %>% 
+    rename(int_end = visit_date) %>% 
+    mutate(problem_start = case_when(problem == TRUE ~ int_start,
+                                     problem == FALSE ~ NA),
+           problem_end = case_when(problem == TRUE ~ int_end,
+                                   problem == FALSE ~ NA), .after = problem,
+           effort_correction_factor = case_when(problem == TRUE ~ bait_days_good,
+                                                problem == FALSE ~ 0))
+  
+  if(nrow(station_dat) == 1){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = NA,
+              problem_end_2 = NA,
+              problem_start_3 = NA,
+              problem_end_3 =NA,
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 2){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = NA,
+              problem_end_3 =NA,
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 3){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>%
+      
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = min(problem_start_3, na.rm = T),
+              problem_end_3 = max(problem_end_3, na.rm = T),
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 4){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = min(problem_start_3, na.rm = T),
+              problem_end_3 = max(problem_end_3, na.rm = T),
+              problem_start_4 = min(problem_start_4, na.rm = T),
+              problem_end_4 = max(problem_end_4, na.rm = T),
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  
+  return(station_dat_formatted)
+}
+
 #function to format yearly data by station_id
 format_station_by_year <- function(year_dat){
   round_1 <- year_dat %>%  
@@ -191,6 +341,179 @@ format_station_by_year <- function(year_dat){
     mutate(station_id = as.factor(station_id))
   dat_split <- split(round_1, round_1$station_id)
   formatted <- dat_split %>% map(format_station)
+  formatted <- bind_rows(formatted)
+  return(formatted)}
+
+
+#function to format yearly data by station_id
+format_bait_by_year <- function(year_dat){
+  round_1 <- year_dat %>%  
+    mutate(station_id = as.character(station_id)) %>% 
+    mutate(station_id = as.factor(station_id))
+  dat_split <- split(round_1, round_1$station_id)
+  formatted <- dat_split %>% map(format_station_bait)
+  formatted <- bind_rows(formatted)
+  return(formatted)}
+
+
+#genralized functions
+format_station2 <- function(station_dat, column){
+  
+  name <- as.name(column)
+  
+  round_1 <- station_dat %>% 
+    mutate(problem = case_when(interval != name ~ TRUE,
+                               interval == name ~ FALSE), .after = camera_days_good) %>% 
+    mutate(int_start = visit_date - days(interval), .before = visit_date) %>% 
+    mutate(problem_days = interval - !!name, .after = camera_days_good) %>% 
+    rename(int_end = visit_date) %>% 
+    mutate(problem_start = case_when(problem == TRUE ~ int_start,
+                                     problem == FALSE ~ NA),
+           problem_end = case_when(problem == TRUE ~ int_end,
+                                   problem == FALSE ~ NA), .after = problem,
+           effort_correction_factor = case_when(problem == TRUE ~ !!name,
+                                                problem == FALSE ~ 0))
+  
+  if(nrow(station_dat) == 1){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = NA,
+              problem_end_2 = NA,
+              problem_start_3 = NA,
+              problem_end_3 =NA,
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 2){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = NA,
+              problem_end_3 =NA,
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 3){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>%
+      
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = min(problem_start_3, na.rm = T),
+              problem_end_3 = max(problem_end_3, na.rm = T),
+              problem_start_4 = NA,
+              problem_end_4 = NA,
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  if(nrow(station_dat) == 4){
+    
+    station_dat_formatted <- round_1 %>% 
+      mutate(visit_num = 1:nrow(station_dat)) %>% 
+      pivot_wider(names_from = visit_num, values_from = c(problem_start, problem_end)) %>% 
+      reframe(.by = station_id,
+              year = first(year),
+              utm_e = first(utm_e),
+              utm_n = first(utm_n),
+              hex_id = first(hex_id),
+              station_num = first(station_num),
+              set_date = min(int_start),
+              pull_date = max(int_end),
+              problem_days = sum(problem_days),
+              problem_periods = sum(problem),
+              problem_start_1 = min(problem_start_1, na.rm = T),
+              problem_end_1 = max(problem_end_1, na.rm = T),
+              problem_start_2 = min(problem_start_2, na.rm = T),
+              problem_end_2 = max(problem_end_2, na.rm = T),
+              problem_start_3 = min(problem_start_3, na.rm = T),
+              problem_end_3 = max(problem_end_3, na.rm = T),
+              problem_start_4 = min(problem_start_4, na.rm = T),
+              problem_end_4 = max(problem_end_4, na.rm = T),
+              bait_days_good = sum(bait_days_good, na.rm = T),
+              snare_days_good = sum(snare_days_good, na.rm = T),
+              effort_correction_factor = sum(effort_correction_factor, na.rm = T),
+              photo_count = sum(photo_count, na.rm = T),
+              cougar = sum(cougar)
+      ) %>% 
+      mutate_all(~ replace(., is.infinite(.), NA))
+  }
+  
+  
+  return(station_dat_formatted)
+}
+
+#function to format yearly data by station_id
+format_station_by_year2 <- function(year_dat, column){
+  round_1 <- year_dat %>%  
+    mutate(station_id = as.character(station_id)) %>% 
+    mutate(station_id = as.factor(station_id))
+  dat_split <- split(round_1, round_1$station_id)
+  formatted <- dat_split %>% map(format_station2, column)
   formatted <- bind_rows(formatted)
   return(formatted)}
 
@@ -234,7 +557,7 @@ survey_periods <- dat %>%
 dat_split <- split(dat, dat$year)
 
 #format each year by station_id
-dat_format <- dat_split %>% map(format_station_by_year)
+dat_format <- dat_split %>% map(format_station_by_year2, "camera_days_good")
 
 #bind the formatted list elements into a single dataframe
 dat_format <- bind_rows(dat_format)
@@ -287,6 +610,56 @@ camop_fixed <- camop %>% as.data.frame() %>%
 #plot camera operation matrix
 camtrapR:::camopPlot(camOp = camop_fixed, palette = "Heat", lattice = TRUE)
 
+
+#########################################################################
+##
+## 2. Prep data to construct daily bait matrix from 2 week interval data
+##
+##########################################################################
+
+dat_format_bait <- dat_split %>% map(format_station_by_year2, "bait_days_good")
+
+#bind the formatted list elements into a single dataframe
+dat_format_bait <- bind_rows(dat_format_bait)
+
+#format dataframe for captrapR::cameraOperation function 
+dat_format_bait2 <- dat_format_bait %>% 
+  rename(Problem1_from = problem_start_1,
+         Problem1_to = problem_end_1,
+         Problem2_from = problem_start_2,
+         Problem2_to = problem_end_2,
+         Problem3_from = problem_start_3,
+         Problem3_to = problem_end_3,
+         Problem4_from = problem_start_4,
+         Problem4_to = problem_end_4,) %>% 
+  select(station_id, set_date, pull_date, Problem1_from:Problem4_to) %>% 
+  mutate(across(c(set_date:Problem4_to), as.character))
+
+
+#convert the dataframe into a daily actiity matrix
+camop_bait <- camtrapR::cameraOperation(CTtable = dat_format_bait2,
+                                   stationCol = "station_id",
+                                   setupCol = "set_date",
+                                   retrievalCol = "pull_date",
+                                   writecsv = FALSE,
+                                   hasProblems = TRUE,
+                                   dateFormat = "ymd"
+)
+
+#function to convert all values to be 0, 1, or NA
+fix_camop <- function(col){
+  col <- case_when(
+    col < 0 ~ 0,
+    col > 1 ~ 1,
+    col > 0 & col < 1 ~ 1,
+    .default = col
+  )
+}
+
+#fix negative and non-integer values using the above function. 
+camop_fixed <- camop %>% as.data.frame() %>% 
+  mutate(across(everything(), fix_camop)) %>% 
+  as.matrix()
 
 
 #########################################################################
@@ -458,6 +831,42 @@ effort_matrix <- det_hist_full %>%
 
 
 ################################ Graveyard #################################
+
+
+#possible simpler version of formatting function
+
+# format_station <- function(station_dat) {
+#   library(dplyr)
+#   
+#   # Calculate the problem_start and problem_end columns
+#   formatted_data <- station_dat %>%
+#     mutate(problem = interval != camera_days_good,
+#            int_start = visit_date - days(interval),
+#            problem_days = interval - camera_days_good) %>%
+#     rename(int_end = visit_date) %>%
+#     group_by(station_id) %>%
+#     summarize(across(starts_with("problem_start"), ~ min(., na.rm = TRUE), .names = "min_{.col}"),
+#               across(starts_with("problem_end"), ~ max(., na.rm = TRUE), .names = "max_{.col}"),
+#               year = first(year),
+#               utm_e = first(utm_e),
+#               utm_n = first(utm_n),
+#               hex_id = first(hex_id),
+#               station_num = first(station_num),
+#               set_date = min(int_start),
+#               pull_date = max(int_end),
+#               problem_days = sum(problem_days),
+#               problem_periods = sum(problem),
+#               bait_days_good = sum(bait_days_good, na.rm = TRUE),
+#               snare_days_good = sum(snare_days_good, na.rm = TRUE),
+#               effort_correction_factor = sum(effort_correction_factor, na.rm = TRUE),
+#               photo_count = sum(photo_count, na.rm = TRUE),
+#               cougar = sum(cougar))
+#   
+#   # Replace infinite values with NA
+#   formatted_data <- formatted_data %>% mutate_all(~ replace(., is.infinite(.), NA))
+#   
+#   return(formatted_data)
+# }
 
 #########################################################################
 ##

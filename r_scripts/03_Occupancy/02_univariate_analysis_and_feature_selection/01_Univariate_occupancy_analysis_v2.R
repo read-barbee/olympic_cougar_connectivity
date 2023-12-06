@@ -21,7 +21,13 @@ source("r_scripts/03_Occupancy/01_data_prep/Utility/sampling_interval_aggregatio
 # Load data
 load("r_scripts/03_Occupancy/01_data_prep/Utility/sampling_interval_aggregation/original/dat_example.Rdata") # object called dat
 
+#activity/detection data
 dat2 <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_10-06-23.csv")
+
+#bait matrix
+bait_mat <- read_csv("data/Camera_Data/Olympic_National_Park/cam_act/onp_fisher_2013_2016_bait_mat_10-11-23.csv")
+
+snare_mat <- read_csv("data/Camera_Data/Olympic_National_Park/cam_act/onp_fisher_2013_2016_snare_mat_10-11-23.csv")
 
 
 #########################################################################
@@ -149,6 +155,95 @@ w_eff[is.na(w_eff)] <- 0
 
 #id_cols = c(cell_id, year),
 
+
+#########################################################################
+##
+##  2. Format bait matrix for new survey interval
+##
+##########################################################################
+
+#  Effort/Detection covariate: total number of days all cameras within a cell was operational during each interval
+
+#Select necessary columns
+eff_int <- dat_form %>%
+  dplyr::select(station_id_year, cell_id, year, date, daily_eff) %>%
+  as_tibble()
+
+#Assign each row to an observation interval
+eff_tmp1 <- make_interval(eff_int, date, survey_period, number_of_periods) 
+
+#add column for survey interval
+eff_tmp2 <- eff_tmp1 %>% 
+  dplyr::group_by(cell_id, year) %>% 
+  dplyr::mutate(survey_interval = interval - min(interval) + 1) %>%
+  dplyr::ungroup()
+
+#calculate the total number of camera_days for each survey interval
+eff_tmp3 <- eff_tmp2 %>%
+  dplyr::select(station_id_year, cell_id, year, daily_eff, survey_interval) %>%  
+  group_by(survey_interval, cell_id, year) %>% 
+  mutate(camdays = sum(daily_eff, na.rm = TRUE)) %>%
+  slice(1) %>%
+  as.data.frame() 
+
+#pivot from long format to wide format
+w_eff <- eff_tmp3 %>%
+  dplyr::select(station_id_year, cell_id, year, camdays, survey_interval) %>%  
+  group_by(cell_id, survey_interval, year) %>% 
+  mutate(camdays = sum(camdays, na.rm = TRUE)) %>%
+  slice(1) %>%
+  as.data.frame() %>%
+  arrange(survey_interval, cell_id, year) %>%
+  pivot_wider(values_from = camdays, names_from = survey_interval) %>%
+  as.data.frame()
+w_eff[is.na(w_eff)] <- 0	
+
+#id_cols = c(cell_id, year),
+
+
+#########################################################################
+##
+##  2. Format snare matrix for new survey interval
+##
+##########################################################################
+
+#  Effort/Detection covariate: total number of days all cameras within a cell was operational during each interval
+
+#Select necessary columns
+eff_int <- dat_form %>%
+  dplyr::select(station_id_year, cell_id, year, date, daily_eff) %>%
+  as_tibble()
+
+#Assign each row to an observation interval
+eff_tmp1 <- make_interval(eff_int, date, survey_period, number_of_periods) 
+
+#add column for survey interval
+eff_tmp2 <- eff_tmp1 %>% 
+  dplyr::group_by(cell_id, year) %>% 
+  dplyr::mutate(survey_interval = interval - min(interval) + 1) %>%
+  dplyr::ungroup()
+
+#calculate the total number of camera_days for each survey interval
+eff_tmp3 <- eff_tmp2 %>%
+  dplyr::select(station_id_year, cell_id, year, daily_eff, survey_interval) %>%  
+  group_by(survey_interval, cell_id, year) %>% 
+  mutate(camdays = sum(daily_eff, na.rm = TRUE)) %>%
+  slice(1) %>%
+  as.data.frame() 
+
+#pivot from long format to wide format
+w_eff <- eff_tmp3 %>%
+  dplyr::select(station_id_year, cell_id, year, camdays, survey_interval) %>%  
+  group_by(cell_id, survey_interval, year) %>% 
+  mutate(camdays = sum(camdays, na.rm = TRUE)) %>%
+  slice(1) %>%
+  as.data.frame() %>%
+  arrange(survey_interval, cell_id, year) %>%
+  pivot_wider(values_from = camdays, names_from = survey_interval) %>%
+  as.data.frame()
+w_eff[is.na(w_eff)] <- 0	
+
+#id_cols = c(cell_id, year),
 #########################################################################
 ##
 ##  2. Make objects for ubms

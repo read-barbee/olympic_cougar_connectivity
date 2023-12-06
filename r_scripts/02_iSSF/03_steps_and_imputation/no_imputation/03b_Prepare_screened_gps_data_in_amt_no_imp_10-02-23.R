@@ -96,21 +96,10 @@ names(cov_stack) <- c("tree_cover_hansen",
 # plan(multicore)
 # terra::plot(cov_stack, parallel = TRUE)
 
-#########################################################################
-##
-## 3. Additional Data Cleaning
-##
-##########################################################################
-
-#Nest locations by animal_id 
-locs_nested <- locs_screened %>% 
-  nest_by(animal_id, sex, dispersal_status) 
-
-
 
 #########################################################################
 ##
-## 4. Convert data to amt tracks
+## 3. Convert data to amt tracks
 ##
 ##########################################################################
 
@@ -120,6 +109,11 @@ multi_track <- function(d){
   make_track(d, lon_utm, lat_utm, date_time_utc, check_duplicates = TRUE, all_cols = TRUE, crs = 5070) 
   #%>% transform_coords(crs_to = 5070)
 }
+
+#Nest locations by animal_id 
+locs_nested <- locs_screened %>% 
+  nest_by(animal_id, sex, dispersal_status) 
+
 
 #create tracks
 locs_nested$tracks <-map(locs_nested$data, multi_track)
@@ -131,7 +125,7 @@ dispersers <- locs_nested %>%
 
 #########################################################################
 ##
-## 5. Examine Sampling Rates
+## 4. Examine Sampling Rates
 ##
 ##########################################################################
 
@@ -155,7 +149,7 @@ summary(sampling_rates)
 
 #########################################################################
 ##
-## 6. Remove duplicate locations (could do this in screening section)
+## 5. Remove duplicate locations (could do this in screening section)
 ##
 ##########################################################################
 #check for duplicate points in tracks
@@ -192,7 +186,7 @@ bind_rows(locs_nested$tracks) %>% get_dupes(deployment_id, t_)
 
 #########################################################################
 ##
-## 7. Identify dispersal events (only need to do this once and save to csv)
+## 6. Identify dispersal events (only need to do this once and save to csv)
 ##
 ##########################################################################
 # 
@@ -228,7 +222,7 @@ bind_rows(locs_nested$tracks) %>% get_dupes(deployment_id, t_)
 
 #########################################################################
 ##
-## 8. Identify optimal resampling interval
+## 7. Identify optimal resampling interval
 ##
 ##########################################################################
 

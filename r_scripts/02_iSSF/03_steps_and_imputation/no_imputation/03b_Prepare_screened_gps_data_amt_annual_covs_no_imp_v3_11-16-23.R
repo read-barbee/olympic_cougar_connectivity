@@ -144,12 +144,7 @@ for (tif_file in cov_files) {
 }
 
 #import static stack
-static_stack <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_single_tpi.tif")
-mtpi <- rast("/Users/tb201494/Desktop/1km_buffer/static/mtpi_1km_buffer.tif")
-
-static_stack$mtpi <- mtpi
-
-static_stack <- static_stack[[c("elevation", "slope", "aspect", "aspect_northness", "aspect_eastness", "tpi", "mtpi", "tri", "distance_water")]]
+static_stack <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_11-29-23.tif")
 
 #########################################################################
 ##
@@ -446,7 +441,7 @@ amt_steps_all_covs$steps <- map(amt_steps_all_covs$steps, extract_annual_covs, c
 #points near bodies of water don't have hii values, npp, gpp, or perc veg values because of coarse water-masking in GEE products. Solve by interpolation
 
 #list of covariates with coarse water masking to interpolate values for
-covs_to_interp_300m <- c("perc_nonveg", "perc_nontree_veg", "perc_tree_cov", "hii_annual", "roads_hii_annual", "infra_hii_annual", "landuse_hii_annual", "popdens_hii_annual", "mtpi")
+covs_to_interp_300m <- c("perc_nonveg_annual", "perc_nontree_veg_annual", "perc_tree_cov_annual", "hii_annual", "roads_hii_annual", "infra_hii_annual", "landuse_hii_annual", "popdens_hii_annual", "mtpi")
 
 #Interpolate precip, npp and gpp with 600 m radius b/c of coarser scale
 covs_to_interp_600m <- c("precip_annual", "npp_annual", "gpp_annual")
@@ -481,7 +476,12 @@ for(i in 1:length(na_year)){
  if(nrow(na_year[[i]])>0){
   year <- names(na_year)[i]
   stack <- cov_stacks[[paste0("cov_stack_", as.character(year))]]
+  
+  if(sum(str_detect(names(stack), coll(col_name)))==0){
+    rast <- static_stack[[str_detect(names(static_stack), coll(col_name))]]
+  } else{
   rast <- stack[[str_detect(names(stack), coll(col_name))]]
+  }
   
   #extract values
   na_year[[i]][[col_name]] <- terra::extract(rast, na_year[[i]], fun=function(x){mean(x, na.rm=T)})[,2]
@@ -627,7 +627,7 @@ steps_final %>% filter(is.na(popdens_hii_annual)) %>% filter(case_==FALSE) %>%
 
 
 
-#write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_annual_cov_11-16-2023.csv")
+#write_csv(steps_final, "data/Location_Data/Steps/2h_steps_unscaled_no_imp_annual_cov_11-30-2023.csv")
 
 
 

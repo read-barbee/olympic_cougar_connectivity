@@ -74,12 +74,16 @@ prec.beta <- 1e-4
 
 #########################################################################
 ##
-## 1. Import and format step data
+## 1. Import and format step data and cov stack
 ##
 ##########################################################################
 
 #no imputation
-steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_annual_cov_11-16-2023.csv")
+steps <- read_csv("data/Location_Data/Steps/2h_steps_unscaled_no_imp_annual_cov_11-30-2023.csv")
+
+
+#covariates
+cov_stack <- rast("/Users/tb201494/Desktop/1km_buffer/cov_stack_pred_300m_11-21-2023.tif")
 
 #########################################################################
 ##
@@ -297,13 +301,16 @@ fit_list <- list(top_waic_comb, top_waic_sep, top_rho_comb, top_rho_sep, ndvi_qu
 mod_names <- c("top_waic_comb", "top_waic_sep", "top_rho_comb", "top_rho_sep", "ndvi_quad", "ndvi_popdens_quad", "all_quad")
 
 mod_table <- make_sel_table(fit_list, mod_names)
-  
-cov_stack <- rast("/Users/tb201494/Desktop/1km_buffer/cov_stack_pred_300m_11-21-2023.tif")
 
-#~ 6 min 4 fold cv = 0.7
-system.time(top_linear_cv <- k_fold_inla(mod_dat, form2, cov_stack, n_folds=4))
 
-#last fold didn't converge
-system.time(ndvi_quad_cv <- k_fold_inla(mod_dat, form5, cov_stack, n_folds=4))
+#~ 6 min 4 fold cv = 0.7; 10-fold cv = 0.68 ~ 12 minutes
+system.time(top_linear_cv <- k_fold_inla(mod_dat, form2, cov_stack, n_folds=10))
 
+# 4 fold didn't converge. 10 fold cv = -0.7236364
+system.time(ndvi_quad_cv <- k_fold_inla(mod_dat, form5, cov_stack, n_folds=10))
+
+#10 fold cv = -0.7236364 ~15 min
+system.time(all_quad_cv <- k_fold_inla(mod_dat, form7, cov_stack, n_folds=10))
+
+sum(unlist(all_quad_cv[1:10]))/10
 

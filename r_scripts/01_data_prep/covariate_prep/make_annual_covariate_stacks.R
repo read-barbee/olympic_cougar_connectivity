@@ -19,6 +19,8 @@ years <- 2010:2023
 # Define an output directory
 output_dir <- "data/Habitat_Covariates/annual_covariates/annual_stacks"
 
+output_dir2 <- "data/Habitat_Covariates/annual_covariates/annual_stacks_by_cov"
+
 
 ################################ Helper functions #################################
 
@@ -221,6 +223,28 @@ cov_list <- list(ndvi_annual,
                  dist_all_roads_annual
                  )
 
+names(cov_list) <- c("ndvi_annual",
+                     "evi_annual",
+                     "gpp_annual",
+                     "npp_annual",
+                     "perc_tree_cov_annual",
+                     "perc_nontree_veg_annual",
+                     "perc_nonveg_annual",
+                     "precip_annual",
+                     "land_cover_usfs_annual",
+                     "land_use_usfs_annual",
+                     "land_use_change_usfs_annual",
+                     "popdens_hii_annual",
+                     "landuse_hii_annual",
+                     "infra_hii_annual",
+                     "roads_hii_annual",
+                     "hii_annual",
+                     "dist_major_roads_annual",
+                     "dist_minor_roads_annual",
+                     "dist_very_small_roads_annual",
+                     "dist_non_motorized_roads_annual",
+                     "dist_all_roads_annual")
+
 
 #make sure all images are in the same CRS
 cov_list<- map(cov_list, crs_fun)
@@ -254,8 +278,21 @@ for (i in 1:length(annual_stacks)) {
 }
 
 
+
+# Output formatted annual stacks by covariate
+for (i in 1:length(cov_list)) {
+  raster <-cov_list[[i]]
+  file_name <- paste0(names(cov_list)[i], ".tif")  # Define the file name
+  output_path <- file.path(output_dir2, file_name)  # Full output path
+  
+  # Export the spatraster as a TIFF file
+  writeRaster(raster, output_path, filetype = "GTiff", overwrite = TRUE)
+  
+  cat("Exported:", output_path, "\n")  # Print the exported file path
+}
+
 #output static stack
 
-# writeRaster(static_stack, file.path(output_dir, "static_stack.tif"), filetype = "GTiff", overwrite = TRUE)
+#writeRaster(static_stack, file.path(output_dir2, "static_stack.tif"), filetype = "GTiff", overwrite = TRUE)
 
 

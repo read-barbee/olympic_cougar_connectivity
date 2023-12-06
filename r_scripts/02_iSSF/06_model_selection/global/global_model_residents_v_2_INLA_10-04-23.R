@@ -37,8 +37,8 @@ params <- c("tree_cover_hansen",
             "popdens_hii",
             "landuse_hii",
             "rails_hii",
-            "infra_hii",
-            "easting")
+            "infra_hii")
+            #"easting")
 
 quad_params <- c(#"tree_cover_hansen",
                  "ndvi"
@@ -587,7 +587,7 @@ cov_stack_pred <- terra::scale(cov_stack_capped)
 
 
 #extract fixed effect beta values from fitted_model
-betas <- inla_fit_quad2$summary.fixed$mean
+betas <- inla_fit_linear$summary.fixed$mean
 
 #reff <- ranef(global_fit)
 
@@ -606,43 +606,43 @@ preds <- exp((betas[1] * cov_stack_pred$tree_cover_hansen) +
                (betas[9] * cov_stack_pred$popdens_hii) +
                (betas[10] * cov_stack_pred$landuse_hii) +
                (betas[11] * cov_stack_pred$rails_hii) +
-               (betas[12] * cov_stack_pred$infra_hii) +
-               (betas[13] * cov_stack_pred$easting) +
+               (betas[12] * cov_stack_pred$infra_hii))/
+               #(betas[13] * cov_stack_pred$easting) +
                #(betas[10] * cov_stack_pred$elevation) +
-               (betas[14] * cov_stack_pred$tree_cover_hansen^2) +
-               (betas[15] * cov_stack_pred$ndvi^2) +
+              # (betas[14] * cov_stack_pred$tree_cover_hansen^2) +
+               #(betas[15] * cov_stack_pred$ndvi^2) +
                #(betas[16] * cov_stack_pred$tpi^2) +
                #(betas[17] * cov_stack_pred$northing^2) +
                #(betas[18] * cov_stack_pred$tri^2) +
-               (betas[16] * cov_stack_pred$perc_tree_cover^2) +
+              # (betas[16] * cov_stack_pred$perc_tree_cover^2) +
                #(betas[20] * cov_stack_pred$roads_hii^2) +
-               (betas[17] * cov_stack_pred$popdens_hii^2))/
+              # (betas[17] * cov_stack_pred$popdens_hii^2))/
               #(betas[22] * cov_stack_pred$landuse_hii^2))/
               #(betas[17] * cov_stack_pred$elevation^2) +
-  (1 + exp((betas[1] * cov_stack_pred$tree_cover_hansen) + 
-             (betas[2] * cov_stack_pred$ndvi) + 
-             (betas[3] * cov_stack_pred$tpi) + 
-             (betas[4] * cov_stack_pred$northing) + 
-             (betas[5] * cov_stack_pred$tri) + 
-             (betas[6] * cov_stack_pred$perc_tree_cover) +
-             (betas[7] * cov_stack_pred$perc_nonveg) +
-             (betas[8] * cov_stack_pred$roads_hii) + 
-             (betas[9] * cov_stack_pred$popdens_hii) +
-             (betas[10] * cov_stack_pred$landuse_hii) +
-             (betas[11] * cov_stack_pred$rails_hii) +
-             (betas[12] * cov_stack_pred$infra_hii) +
-             (betas[13] * cov_stack_pred$easting) +
-             #(betas[10] * cov_stack_pred$elevation) +
-             (betas[14] * cov_stack_pred$tree_cover_hansen^2) +
-             (betas[15] * cov_stack_pred$ndvi^2) +
-             #(betas[16] * cov_stack_pred$tpi^2) +
-             #(betas[17] * cov_stack_pred$northing^2) +
-             #(betas[18] * cov_stack_pred$tri^2) +
-             (betas[16] * cov_stack_pred$perc_tree_cover^2) +
-             #(betas[20] * cov_stack_pred$roads_hii^2) +
-             (betas[17] * cov_stack_pred$popdens_hii^2)))
-     #(betas[22] * cov_stack_pred$landuse_hii^2))/
-     #(betas[17] * cov_stack_pred$elevation^2) +
+  (1 + exp(betas[1] * cov_stack_pred$tree_cover_hansen) + 
+     (betas[2] * cov_stack_pred$ndvi) + 
+     (betas[3] * cov_stack_pred$tpi) + 
+     (betas[4] * cov_stack_pred$northing) + 
+     (betas[5] * cov_stack_pred$tri) + 
+     (betas[6] * cov_stack_pred$perc_tree_cover) +
+     (betas[7] * cov_stack_pred$perc_nonveg) +
+     (betas[8] * cov_stack_pred$roads_hii) + 
+     (betas[9] * cov_stack_pred$popdens_hii) +
+     (betas[10] * cov_stack_pred$landuse_hii) +
+     (betas[11] * cov_stack_pred$rails_hii) +
+     (betas[12] * cov_stack_pred$infra_hii))
+  #(betas[13] * cov_stack_pred$easting) +
+  #(betas[10] * cov_stack_pred$elevation) +
+  # (betas[14] * cov_stack_pred$tree_cover_hansen^2) +
+  #(betas[15] * cov_stack_pred$ndvi^2) +
+  #(betas[16] * cov_stack_pred$tpi^2) +
+  #(betas[17] * cov_stack_pred$northing^2) +
+  #(betas[18] * cov_stack_pred$tri^2) +
+  # (betas[16] * cov_stack_pred$perc_tree_cover^2) +
+  #(betas[20] * cov_stack_pred$roads_hii^2) +
+  # (betas[17] * cov_stack_pred$popdens_hii^2))/
+  #(betas[22] * cov_stack_pred$landuse_hii^2))/
+#(betas[17] * cov_stack_pred$elevation^2) +
    
 terra::plot(preds)
 
