@@ -7,8 +7,17 @@ library(INLA)
 
 ################################ User-defined parameters #################################
 
-scales <- c(seq(30, 90, 10), seq(100, 600, 100))
+#fine scale
+#scales <- c(seq(30, 90, 10), seq(100, 1000, 100))
 
+#large scale
+#scales <- c(30, 100, 500, seq(1000, 10000, 1000))
+
+#wide scale
+scales <- c(seq(30, 90, 10), seq(100, 900, 100), seq(1000, 10000, 1000))
+
+#veg cover scales
+#scales <- c(250, seq(300, 900, 100), seq(1000, 10000, 1000))
 
 project_crs=5070
 
@@ -43,6 +52,8 @@ make_form_rand_quad <- function(params, quad_params, n_indiv){
   return(form)
 }
 
+
+cov <- "npp"
 
 #########################################################################
 ##
@@ -107,39 +118,65 @@ locs_nested$steps <- map(locs_nested$tracks, steps_calc)
 ##
 ##########################################################################
 
-dem <- rast("/Users/tb201494/Desktop/1km_buffer/static/elevation_1km_buffer.tif")
-
+#dem <- rast("/Users/tb201494/Desktop/1km_buffer/static/elevation_1km_buffer.tif")
 #replace -999 values with NA
-dem2 <-  mask(dem, dem, maskvalues = -999, updatevalue=NA)
+#dem2 <-  mask(dem, dem, maskvalues = -999, updatevalue=NA)
+
+stack_2020 <- rast("/Users/tb201494/Desktop/annual_cov_stacks_1km_buffer/cov_stack_2020_water_masked.tif")
+
+npp <- rast("/Users/tb201494/Desktop/landsat_npp_30m_2019_test.tif")
+
+#ndvi <- stack_2020[[1]]
+#evi <- stack_2020[[2]]
+#perc_tree_cov <- stack_2020[[5]]
 
 #create template rasters for resampling
 tmp_rasts <- list()
 for(i in 1:length(scales)){
   scale <- scales[i]
-  tmp_rasts[[i]] <- rast(vals =1, crs = "EPSG:5070", extent = ext(dem2), resolution = scale)
+  tmp_rasts[[i]] <- rast(vals =1, crs = "EPSG:5070", extent = ext(npp), resolution = scale)
 }
 names <- vector()
 for(i in 1:length(scales)){
   scale <- scales[i]
   if(scale < 1000){
-    names[i] <- paste0("tpi_", scale, "m")
+    names[i] <- paste0(cov,"_", scale, "m")
   }
   else{
-    names[i] <- paste0("tpi_", (scale/1000), "km")
+    names[i] <- paste0(cov, "_", (scale/1000), "km")
   }
 }
 
 names(tmp_rasts) <- names
 
 
-#resample original raster to each new resolution
+#resample original raster to each new resolution ~ 10m for ndvi at 30m and 17 scales
 
-resampled_rasts <- map(tmp_rasts, function(x){return(terra::resample(dem2, x, method = "bilinear"))})
+# resampled_rasts <- map(tmp_rasts, function(x){return(terra::resample(ndvi, x, method = "bilinear", threads = TRUE))})
+
+resampled_rasts <- list()
+for(i in 1:length(tmp_rasts)){
+  
+  resampled_rasts[[i]] <- terra::resample(npp, tmp_rasts[[i]], method = "bilinear", threads = TRUE)
+  
+  print(paste0(names[i],"   ", i, "/", length(tmp_rasts)))
+}
 
 
-#calculate tpi at each resolution
-tpi_scales <- map(resampled_rasts, function(x){return(terra::terrain(x, "TPI"))})
-
+# if(cov=="tpi"){
+# #calculate tpi at each resolution
+# tpi_scales <- map(resampled_rasts, function(x){return(terra::terrain(x, "TPI"))})
+# }
+# 
+# if(cov=="tri"){
+# #calculate tri at each resolution
+# tri_scales <- map(resampled_rasts, function(x){return(terra::terrain(x, "TRI"))})
+# }
+# 
+# if(cov=="roughness"){
+#   #calculate tri at each resolution
+#   roughness_scales <- map(resampled_rasts, function(x){return(terra::terrain(x, "roughness"))})
+# }
 
 #########################################################################
 ##
@@ -157,7 +194,7 @@ step_frames <- list()
 step_names <- vector()
 for(i in 1:length(scales)){
   amt_steps_copy <- amt_steps
-  amt_steps_copy$steps <- map(amt_steps_copy$steps, extract_covariates, covariates = tpi_scales[[i]])
+  amt_steps_copy$steps <- map(amt_steps_copy$steps, extract_covariates, covariates = resampled_rasts[[i]])
   
   amt_steps_copy$steps <- map(amt_steps_copy$steps, function(x){return(x %>% mutate(name = names[i]) %>% select(name, everything()))})
   step_names[i] <- paste0("steps_", names[i])
@@ -178,20 +215,24 @@ step_frames_unnest2 <- map(step_frames_unnest, function(x){return(x %>%
                                                                            animal_id = as.numeric(as.factor(animal_id))) %>% 
                                                                     rename(id1=animal_id))})
 
+step_frames_unnest3 <- map(step_frames_unnest2, function(x){return(x %>% 
+                                                                     mutate(annualNPP = scale(annualNPP)) %>% 
+                                                                     mutate(annualNPP = as.numeric(annualNPP)))})
+
 
 #########################################################################
 ##
 ## 4.Fit univariate models at each scale
 ##
 ##########################################################################
-inla_form <- make_form_rand_quad(params = c("TPI"), quad_params = NULL, n_indiv = n_indiv)
+inla_form <- make_form_rand_quad(params = c("annualNPP"), quad_params = NULL, n_indiv = n_indiv)
 
 mods <- list()
 mod_names <- vector()
 for(i in 1:length(step_frames_unnest2)){
   
   mods[[i]] <- inla(inla_form, family ="Poisson", 
-                   data=step_frames_unnest2[[i]],
+                   data=step_frames_unnest3[[i]],
                    control.fixed = list(
                    mean = mean.beta,
                    prec = list(default = prec.beta)),
@@ -229,23 +270,28 @@ for(i in 1:length(mods)){
 indiv_posteriors <- bind_rows(indiv_posteriors)
 indiv_posteriors$name <- factor(indiv_posteriors$name, levels = names)
 
+waic <- vector()
+for(i in 1:length(mods)){
+  waic[i] <- mods[[i]]$waic$waic
+}
 
+waic_tab <- tibble(mod=names, waic = waic) %>% mutate(mod = factor(mod, levels = names))
 
 
 #pop level plots
 ggplot(posteriors, aes(x = name, y = mean)) +
   geom_pointrange(aes(ymin = `0.025quant`, ymax = `0.975quant`), size = 1) +
   labs(x = "Model", y = "Mean") +
-  ggtitle("Mean TPI with 95% Credible Intervals for Each Model") +
+  ggtitle("Mean NPP Landsat with 95% Credible Intervals for Each Model") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels if needed
 
-ggplot(posteriors, aes(x = name, y = mean)) +
-  geom_point(size = 1) +
-  labs(x = "Model", y = "Mean") +
-  ggtitle("TPI Mean Pop Coefficients by Scale") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels if needed
+# ggplot(posteriors, aes(x = name, y = mean)) +
+#   geom_point(size = 1) +
+#   labs(x = "Model", y = "Mean") +
+#   ggtitle("TPI Mean Pop Coefficients by Scale") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels if needed
 
 
 #indiv level plots
@@ -253,11 +299,26 @@ ggplot(posteriors, aes(x = name, y = mean)) +
 ggplot(indiv_posteriors %>% filter(ID!=1), aes(x = name, y = mean)) +
   geom_boxplot() +
   labs(x = "Model", y = "Mean") +
-  ggtitle("TPI Indiv Mean Coefficients by Scale") +
+  ggtitle("NPP Landsat Indiv Mean Coefficients by Scale") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 
-# tri_30m <- terra::terrain(dem2, v="TRI")
+# ggplot(indiv_posteriors %>% filter(ID!=1), aes(x = name, y = mean)) +
+#   geom_violin() +
+#   labs(x = "Model", y = "Mean") +
+#   ggtitle("Roughness Indiv Mean Coefficients by Scale") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+
+#waic plots
+ggplot(waic_tab, aes(x = mod, y = waic)) +
+  geom_point(size = 2) +
+  labs(x = "Model", y = "WAIC") +
+  ggtitle("NPP Landsat WAIC by Scale (2 Hour Steps)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
 # tririley_30m <- terra::terrain(dem2, v="TRIriley")
 # trirmsd_30m <- terra::terrain(dem2, v="TRIrmsd")
 # roughness_30m <- terra::terrain(dem2, v="roughness")
@@ -278,3 +339,6 @@ ggplot(indiv_posteriors %>% filter(ID!=1), aes(x = name, y = mean)) +
 #   step_name <- paste0("steps_", names[i])
 #   amt_steps_copy[[step_name]] <- map(amt_steps_copy$steps, extract_covariates, covariates = tpi_scales[[i]])
 #}
+
+
+

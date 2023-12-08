@@ -98,7 +98,7 @@ water_mask<- water_polys %>% filter(WB_PERIOD_ =="PER" ) %>%
   sf::st_union() %>% #dissolve polygons into single vector mask layer
   st_sf()
 
-write_sf(water_mask, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Habitat_Covariates/washington_water_polygons/op_water_mask_12-05-23.shp")
+#write_sf(water_mask, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Habitat_Covariates/washington_water_polygons/op_water_mask_12-05-23.shp")
 
 
 
@@ -355,6 +355,6 @@ for (i in 1:length(annual_stacks)) {
 
 #output static stack
 
-# writeRaster(static_stack, file.path("/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/data/Habitat_Covariates/annual_covariates/1km_buffer/raw_collections/static", "static_stack_1km_buffer_11-29-23.tif"), filetype = "GTiff", overwrite = TRUE)
+#writeRaster(static_stack_masked, file.path("/Users/tb201494/Desktop/1km_buffer", "static_stack_1km_buffer_water_masked_12-06-23.tif"), filetype = "GTiff", overwrite = TRUE)
 
 

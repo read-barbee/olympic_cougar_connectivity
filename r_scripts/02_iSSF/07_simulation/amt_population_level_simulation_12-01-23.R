@@ -51,9 +51,21 @@ steps_scaled <- steps %>%
 ##
 ##########################################################################
 
-cov_stack <- terra::rast("/Users/tb201494/Desktop/1km_buffer/cov_stack_pred_300m_11-30-2023.tif")
+cov_stack_annual <- rast("/Users/tb201494/Desktop/annual_cov_stacks_1km_buffer/cov_stack_2023_water_masked.tif")
 
-cov_stack$`I(ndvi_annual^2)` <- cov_stack[["ndvi_annual"]]^2
+names_new <- vector()
+for(i in 1:length(names(cov_stack_annual))){
+  names_new[i] <- str_sub(names(cov_stack_annual)[i], start = 1, end = -6)
+}
+names(cov_stack_annual) <- names_new
+
+cov_stack_static <- rast("/Users/tb201494/Desktop/1km_buffer/static_stack_1km_buffer_11-29-23.tif")
+
+cov_stack <- c(cov_stack_static, cov_stack_annual)
+
+# cov_stack <- terra::rast("/Users/tb201494/Desktop/1km_buffer/cov_stack_pred_300m_11-30-2023.tif")
+
+cov_stack$ndvi_annual2 <- cov_stack[["ndvi_annual"]]^2 #`I(ndvi_annual^2)`
 #resample cov_stack to lower resolution for simulation
 #cov_stack2 <- terra::aggregate(cov_stack, fact=10, cores=5)
 
@@ -92,7 +104,7 @@ names(coefs) <- names
 # plot(x, dgamma(x, shape = 2, scale = 2), type = "l")
 
 #Fit a global issf style model using the muff-estimated coefficients.
-mod <- make_issf_model(coefs = c(coefs_linear, sl_ = median(steps$sl_, na.rm=T), ta_ = median(steps$ta_, na.rm=T)),
+mod <- make_issf_model(coefs = c(coefs, sl_ = median(steps$sl_, na.rm=T), ta_ = median(steps$ta_, na.rm=T)),
                        sl = fit_distr(steps$sl_, "gamma", na.rm = TRUE),
                        ta =fit_distr(steps$ta_, "vonmises", na.rm = TRUE))
 
@@ -218,7 +230,7 @@ sim_paths_general <- function(n_paths, n_steps, mod, covs, barriers){
 }
 
 #run simulation ~ 2 hours for one year long track (4,400 steps), 8.4 hours for 4 tracks of 4,400 steps. Eventually want to do 100 tracks per individual lion
-system.time(paths <- sim_paths_general(4, 4400, mod, cov_stack, water_barriers)) #cov_stack_masked #water_polys_start
+system.time(paths <- sim_paths_general(1, 4400, mod, cov_stack, water_barriers)) #cov_stack_masked #water_polys_start
 
 #plot simulated paths
 paths_sf <- paths %>% st_as_sf(coords = c("x_", "y_"), crs = 5070)

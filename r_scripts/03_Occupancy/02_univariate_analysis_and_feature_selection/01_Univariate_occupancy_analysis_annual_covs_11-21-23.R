@@ -4,7 +4,7 @@
 
 # Date:2023-10-12 
 
-#Last updated: 2023-11-21
+#Last updated: 2023-12-07
 
 # Purpose:
 
@@ -16,7 +16,7 @@ library(terra)
 library(ubms)
 library(beepr)
 library(DataExplorer)
-#library(doParallel)
+library(doParallel)
 
 ################################ User-defined Parameters #################################
 
@@ -28,7 +28,7 @@ library(DataExplorer)
 ######################################################################
 
 #activity/detection data
-occ_dat <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_annual_covs_14_day_period_11-21-23.csv")
+occ_dat <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_annual_covs_12-07-23.csv")
 
 
 #########################################################################
@@ -38,7 +38,7 @@ occ_dat <- read_csv("data/Camera_Data/master/ocp_onp_occ_dat_annual_covs_14_day_
 ##########################################################################
 
 cov_check <- occ_dat %>% 
-  select(elevation:dist_all_roads_annual) %>% 
+  select(elevation:dens_all_roads_annual) %>% 
   mutate(across(land_cover_usfs_annual:land_use_change_usfs_annual, as.factor))
 
 #data overview
@@ -67,18 +67,18 @@ plot_bar(cov_check %>% select(land_cover_usfs_annual, land_use_usfs_annual, land
 ##
 ##########################################################################
 occ_dat_scaled <- occ_dat %>% 
-  mutate(across(c(elevation:precip_annual, popdens_hii_annual:dist_all_roads_annual), scale)) %>% 
-  mutate(across(c(elevation:precip_annual, popdens_hii_annual:dist_all_roads_annual), as.numeric))
+  mutate(across(c(elevation:precip_annual, popdens_hii_annual:dens_all_roads_annual), scale)) %>% 
+  mutate(across(c(elevation:precip_annual, popdens_hii_annual:dens_all_roads_annual), as.numeric))
 
 
 #remove station rows with missing covariate values
-complete_cases <- occ_dat_scaled %>% select(elevation:dist_all_roads_annual) %>% 
+complete_cases <- occ_dat_scaled %>% select(c(elevation:precip_annual, popdens_hii_annual:dens_all_roads_annual)) %>% 
   complete.cases()
 
 occ_dat_complete <- occ_dat_scaled %>% 
   mutate(comp = complete_cases) %>% 
-  unite("cell_id_year", cell_id, year, remove = FALSE) %>% 
-  mutate(cell_id_year = as.factor(cell_id_year)) %>% 
+  #unite("cell_id_year", cell_id, year, remove = FALSE) %>% 
+  #mutate(cell_id_year = as.factor(cell_id_year)) %>% 
   filter(comp==TRUE)
   
 
@@ -104,7 +104,7 @@ snare <- occ_dat_complete %>%
   dplyr::select(contains("snare")) %>%
   as.matrix()
 
-covs_scaled <- occ_dat_complete %>% select(cell_id_year, elevation:dist_all_roads_annual)
+covs_scaled <- occ_dat_complete %>% select(cell_id, year, elevation:dens_all_roads_annual)
 
 umf_stack <- unmarkedFrameOccu(y = y, 
 	siteCovs = covs_scaled,
@@ -120,11 +120,11 @@ head(umf_stack)
 ##
 ##########################################################################
 corr_dat <- covs_scaled %>% 
-	dplyr::select(-cell_id_year)
+	dplyr::select(-c(cell_id, year))
 
 
 cont <- covs_scaled %>% 
-  select(elevation:dist_all_roads_annual, -aspect) %>% 
+  select(elevation:dens_all_roads_annual, -aspect) %>% 
   mutate(across(land_cover_usfs_annual:land_use_change_usfs_annual, as.factor)) %>% 
   dummify(select = c("land_cover_usfs_annual", "land_use_usfs_annual", "land_use_change_usfs_annual")) %>%
   #mutate(across(elevation:dist_all_roads_annual, as.numeric)) %>% 
@@ -159,7 +159,7 @@ cor_dat <- tibble(variables = paste0(var1, "_", var2), corr = correlation) %>%
 #the GGAlly package corrplot is more informative for numeric variables
 GGally::ggcorr(corr_dat, label = TRUE)
 
-#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_occ_2_week_11-21-23.csv")
+#write_csv(cor_dat, "feature_selection/pairwise_cov_corr_occ_2_week_12-07-23.csv")
 
 #########################################################################
 ##
@@ -240,7 +240,7 @@ occu_det_summ <- mod_sel %>%
   left_join(looic, by = join_by(model)) %>%
   relocate(elpd:weight, .after=Rhat)
 
-#write_csv(occu_det_summ, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/feature_selection/occu_det_model_fits_14_day_11-23-23.csv")
+#write_csv(occu_det_summ, "/Users/tb201494/Library/CloudStorage/Box-Box/olympic_cougar_connectivity/feature_selection/occu_det_model_fits_14_day_12-7-23.csv")
 
 
 #  Significant effects of: ___ so take this detection
@@ -261,11 +261,11 @@ occu_det_summ <- mod_sel %>%
 
 #### NULL MODEL ###
 
-null_fit <- stan_occu(~ scale(eff) + scale(bait) + scale(snare) ~ (1|cell_id_year), data=umf_stack, chains=3, iter=1500)
+null_fit <- stan_occu(~ scale(eff) + scale(bait) + scale(snare) ~ (1|cell_id), data=umf_stack, chains=3, iter=1500)
 
 traceplot(null_fit)
 
-traceplot(null_fit, pars = "sigma_state")
+traceplot(null_fit, pars = "sigma_state", inc_warmup=TRUE)
 
 null_fit_list <- list(null_fit)
 
@@ -273,17 +273,15 @@ names(null_fit_list) <- "null"
 
 
 
-cov_names <- covs_scaled %>% select(-cell_id_year) %>% names()
+cov_names <- covs_scaled %>% select(-c(cell_id, year)) %>% names()
 
-#parallel loop doesn't seem to work
-
-#takes 2 hours without parallel loop. Try parallel next time.
+#fit univariate models
 uni_fits <- list()
 system.time(for(i in 1:length(cov_names)){
   cov <- cov_names[i]
   
   #construct the model formula with linear terms only
-  form <- as.formula(paste0("~ scale(eff) + scale(bait) + scale(snare) ~ ", cov, " + (1|cell_id_year)"))
+  form <- as.formula(paste0("~ scale(eff) + scale(bait) + scale(snare) ~ ", cov, " + (1|cell_id)"))
   
   
   uni_fits[[i]] <- stan_occu(form, data = umf_stack, chains = 3, iter = 1500, cores = 3)
@@ -297,6 +295,7 @@ names(uni_fits) <- cov_names
 
 uni_fits <- c(uni_fits, null_fit_list)
 
+#uni_fits <- uni_fits[1:35]
 
 fit_list <- fitList(uni_fits)
 
@@ -339,7 +338,7 @@ occu_uni_summ <- mod_sel %>%
   relocate(elpd:weight, .after=Rhat) %>% 
   filter(!str_detect(term, "sigma") | model=="null")
 
-#write_csv(occu_uni_summ, "feature_selection/occu_uni_fits_14day_cam_bait_snare_11-23-23.csv")
+#write_csv(occu_uni_summ, "feature_selection/occu_uni_fits_14day_cam_bait_snare_12-7-23.csv")
 #RESUME HERE. SAVE MODEL STATS, THEN DO THE SAME WITH QUADRATICS
 #CONSIDER DETECTION COVARIATE FOR PARK VS OCP INSTEAD OF BAIT AND SNARE
 
@@ -351,6 +350,8 @@ occu_uni_summ <- mod_sel %>%
 ##########################################################################
 
 #parallelized for loop: fits in ~ 10 minutes with 3 chains and 100 iterations; 35 min for 1000 iterations
+
+#~ 9 hours for 35 models
 uni_fits_quad <- list()
 system.time(uni_fits_quad <- for (i in 1:length(cov_names)){
   
@@ -360,7 +361,7 @@ system.time(uni_fits_quad <- for (i in 1:length(cov_names)){
                             #fixed effects
                             cov, "+", "I(", cov,  "^2) + ",
                             #random intercept (strata)
-                            "(1|cell_id_year)"))
+                            "(1|cell_id)"))
   
   
   uni_fits_quad[[i]] <- stan_occu(form, data=umf_stack, chains=3, iter=1500)
