@@ -505,9 +505,13 @@ skok_det_all_final <- skok_det_all %>%
   mutate(timestamp = ymd_hms(timestamp)) %>% 
   mutate(timestamp = case_when(deployment_id == "SKOK_2023_SKOK77" ~ timestamp + years(1),
          .default = timestamp)) %>% 
-  mutate(timestamp = as.character(timestamp))
+  mutate(timestamp = as.character(timestamp)) %>% 
+  mutate(timestamp = case_when(is.na(timestamp) ~ paste0(date, " ", time),
+                               .default = timestamp)) 
 
-
+#workaround for parsing issue when timestamp is 00:00:00
+# skok_det_all_final %>% mutate(timestamp = ymd_hms(as.POSIXct(timestamp, format = "%Y-%m-%d %T"))) %>% filter(is.na(timestamp)) %>% View()
+  
 # species_names <- skok_det_all_final %>% distinct(species) %>% pull(species)
 # 
 # test <- checkSpeciesNames(species_names, searchtype ="common")
@@ -524,9 +528,13 @@ act_stations <- skok_act_all_final_long %>% distinct(deployment_id) %>% pull(dep
 setdiff(act_stations, det_stations) #stations in act not in det
 setdiff(det_stations, act_stations) #stations in det not in act
 
-
-
-
+#"SKOK_2021_SKOK07" -camera active but not in detection file
+#"SKOK_2021_SKOK20" - camera active but not in detection file
+#"SKOK_2021_SKOK34" - camera active but not in detection file
+#"SKOK_2021_SKOK43" - camera active but not in detection file
+#"SKOK_2021_SKOK49" - camera active but not in detection file
+#"SKOK_2021_SKOK65" - camera active but not in detection file
+#"SKOK_2022_SKOK39" - camera active but not in detection file. Images for 2023 deployment but not 2022
 ###############################################################################
 
 #6. Test the camtrapR detectionHistory function using the new frames
