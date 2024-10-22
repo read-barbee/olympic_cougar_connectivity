@@ -386,7 +386,7 @@ quin_det_2022_res <- read_csv("data/Camera_Data/all_species/QUIN/2022/Res/Olympi
   #mutate(timestamp = as.character(ymd_hms(timestamp))) %>% 
   select(station_id, camera_id, dep_year, act_year, species, timestamp, date, time)
 
-ymd_hms(quin_det_2022_res$timestamp)
+#ymd_hms(quin_det_2022_res$timestamp)
 
 # quin_det_2022_res %>% 
 #   mutate(timestamp = ymd_hms(timestamp)) %>% 
@@ -437,7 +437,7 @@ quin_dets_all_final <- quin_dets_all %>%
   select(-c(station_id, camera_id)) %>% 
   select(deployment_id, longitude, latitude, everything())
 
-
+quin_dets_all_final %>% mutate(timestamp = ymd_hms(timestamp)) %>% filter(is.na(timestamp))
 
 #check for mismatches between deployment ids in detection and activty history frames
 det_stations <- quin_dets_all_final %>% distinct(deployment_id) %>% pull(deployment_id)
@@ -447,7 +447,9 @@ act_stations <- quin_act_all_final_long %>% distinct(deployment_id) %>% pull(dep
 setdiff(act_stations, det_stations) #stations in act not in det
 setdiff(det_stations, act_stations) #stations in det not in act
 
-
+#"QIR_2022_QIR20_a" - stolen or not deployed
+#"QIR_2022_QIR22_b" - stolen or not deployed
+#"WYN_2022_WYN10" - stolen or not deployed
 
 ###############################################################################
 
