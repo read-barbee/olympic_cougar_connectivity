@@ -372,11 +372,11 @@ makah_dets_all_final <- makah_dets_all %>%
   left_join(dep_key, by = c("dep_year", "station_id", "camera_id")) %>% 
   select(-c(station_id, camera_id)) %>% 
   mutate(date = as.character(date),
-         time = as.character(time)) %>% 
+         time = as.character(time),
+         act_year = year(timestamp)) %>% 
   mutate(timestamp = paste0(date, " ", time)) %>% 
   mutate(timestamp = as.character(timestamp)) %>% 
-  select(deployment_id, longitude, latitude, everything()) %>% 
-  relocate(species, .before = timestamp)
+  select(deployment_id, longitude, latitude, dep_year, act_year, species, timestamp, date, time)
 
 makah_dets_all_final %>% 
   mutate(unique_id = 1:nrow(.)) %>% #filter(unique_id == 37010)
@@ -480,7 +480,7 @@ camtrapR:::camopPlot(det_hist, lattice = TRUE)
 # 
 # write_csv(makah_act_all_final_wide, "data/Camera_Data/all_species/makah_cam_act_2021_wide.csv")
 # 
-# write_csv(makah_dets_all_final, "data/Camera_Data/all_species/makah_detections_all_species_2021.csv")
+#write_csv(makah_dets_all_final, "data/Camera_Data/all_species/makah_detections_all_species_2021.csv")
 # 
 # write_csv(dep_key, "data/Camera_Data/all_species/makah_deployment_key_2021.csv")
 
