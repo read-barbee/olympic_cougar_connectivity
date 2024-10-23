@@ -557,7 +557,7 @@ lekt_act_all_final_long <- lekt_act_all_long_date_fill %>%
 # #camera_level_test
 lekt_act_all_final_long  %>%
   #filter(dep_year == "2019") %>% 
-  arrange(dep_year, station_id, act_date) %>% 
+  arrange(dep_year, set_date) %>% 
   select(deployment_id, act_date, status) %>% 
   pivot_wider(names_from = act_date, values_from = status) %>% 
   column_to_rownames("deployment_id") %>%
