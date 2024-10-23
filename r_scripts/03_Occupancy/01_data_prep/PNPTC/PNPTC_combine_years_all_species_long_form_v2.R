@@ -591,10 +591,17 @@ FS66_b_end_2021 <- "2021-11-18"
 pnptc_dets_all_final <- pnptc_dets_all %>%
   filter(!str_detect(station_id, coll(".JPG"))) %>% 
   filter(station_id != "ElkCam03") %>%
-  filter(!(station_id == "FS05" & dep_year == "2022")) %>% 
+  filter(!(station_id == "FS05" & dep_year == "2022")) %>%
+  left_join(dep_key2, by = c("dep_year", "station_id")) %>%
+  mutate(date = case_when(deployment_id == "PNPTC_2021_PNPTC_FS41" & 
+                          act_year == "2020" ~ as.character(ymd(date) + years(1)),
+                          .default = date)) %>% 
   mutate(timestamp = paste0(date, " ", time)) %>% 
-  left_join(dep_key2, by = c("dep_year", "station_id")) %>% 
+  mutate(act_year = year(ymd_hms(timestamp))) %>% 
   select(deployment_id, longitude, latitude, dep_year, act_year, species, timestamp, date, time)
+
+#pnptc_dets_all_final %>% filter(deployment_id == "PNPTC_2021_PNPTC_FS41") %>% View()
+
 
   pnptc_dets_all_final %>% mutate(timestamp = ymd_hms(timestamp)) %>% filter(is.na(timestamp))
 
@@ -699,7 +706,7 @@ camtrapR:::camopPlot(plot_mat, lattice = TRUE)
 # 
 # write_csv(pnptc_act_all_final_wide, "data/Camera_Data/all_species/pnptc_cam_act_2020_2022_wide.csv")
 # 
-# write_csv(pnptc_dets_all_final, "data/Camera_Data/all_species/pnptc_detections_all_species_2020-2022.csv")
+ #write_csv(pnptc_dets_all_final, "data/Camera_Data/all_species/pnptc_detections_all_species_2020-2022.csv")
 # 
 # write_csv(dep_key2, "data/Camera_Data/all_species/pnptc_deployment_key_2010-2022.csv")
 

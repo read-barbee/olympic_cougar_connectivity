@@ -171,15 +171,27 @@ dep_to_matrix <- function(data){
     mutate(
       # Create a logical vector: TRUE if the date is between start and end, otherwise FALSE
       date_vector = list(as.numeric(date_seq >= start_date & date_seq <= end_date))
-    ) %>%
+    ) %>% 
     unnest_wider(date_vector, names_sep = "_") %>%
-    ungroup()
+    ungroup() %>% 
+    rename_with(.cols=-c(!matches("\\d")), function(x){as.character(date_seq)}) 
   
   # Replace 0 with NA
-  date_matrix[date_matrix == 0] <- NA
+  #date_matrix[date_matrix == 0] <- NA
+
   
-  #rename_columns
-  date_matrix <- date_matrix %>% rename_with(.cols=-c(deployment_id:end_date), function(x){as.character(date_seq)})
+  # date_matrix2 <- date_matrix %>%
+  #   pivot_longer(-c(!matches("\\d")), names_to = "act_date", values_to = "status") %>% 
+  #   mutate(act_date = ymd(act_date),
+  #          start_date = ymd(start_date),
+  #          end_date = ymd(end_date)) %>%
+  #   group_by(deployment_id) %>% 
+  #   mutate(status = case_when(act_date < start_date |  act_date > end_date ~ NA_real_,
+  #                             .default = status)) %>%
+  #   pivot_wider(names_from = act_date, values_from = status) 
+
+    #    select(c(deployment_id, matches("\\d"))) %>% column_to_rownames("deployment_id") %>%   as.matrix() %>% camtrapR:::camopPlot()
+ 
   
   return(date_matrix)
 }
@@ -207,6 +219,46 @@ vs_2022 <- read_csv("data/Camera_Data/all_species/SKOK/2022_2023/skok_viewsheds_
   mutate(dep_year = "2022", .after = station_id)
 
 
+#2021 detections to correct error dates
+skok_det_2021 <- read_csv("data/Camera_Data/all_species/SKOK/2021/SKOK.2021.Metadata.Complete.modified.csv") 
+
+det_dates <- skok_det_2021%>% 
+  clean_names() %>% 
+  select(source_name_1, date_time_10, species) %>%
+  separate_wider_delim(source_name_1, delim = ".", names = c("station_id", "check")) %>%
+  mutate(station_id = str_replace_all(station_id, coll("CAM"), coll("Station")),
+         camera_id = "Camera1") %>% 
+  rename(timestamp = date_time_10) %>% 
+  select(station_id, camera_id, timestamp, species) %>% 
+  mutate(timestamp = mdy_hm(timestamp)) %>% 
+  mutate(dep_year = "2021",
+         act_year = year(timestamp),
+         .after = camera_id) %>%
+  group_by(station_id) %>% 
+  summarize(set_date = date(min(timestamp, na.rm = T)),
+            pull_date = date(max(timestamp, na.rm=T)))
+
+vs_2021_corrected <- vs_2021 %>% 
+  select(-c(set_date, pull_date)) %>% 
+  mutate(station_id =  str_replace(station_id,  "(\\D)(\\d)\\b", "\\10\\2")) %>% 
+  left_join(det_dates, by = "station_id") %>% 
+  mutate(set_date = as.character(set_date),
+         pull_date = as.character(pull_date)) %>% 
+  mutate(set_date = case_when(station_id == "Station07" ~ "2021-06-18",
+                              station_id == "Station20" ~ "2021-06-29",
+                              station_id == "Station34" ~ "2021-06-17",
+                              station_id == "Station43" ~ "2021-06-17",
+                              station_id == "Station49" ~ "2021-07-07",
+                              station_id == "Station65" ~ "2021-06-01",
+                              .default = set_date),
+         pull_date = case_when(station_id == "Station07" ~ "2021-11-06",
+                              station_id == "Station20" ~ "2021-12-01",
+                              station_id == "Station34" ~ "2021-08-02",
+                              station_id == "Station43" ~ "2021-07-22",
+                              station_id == "Station49" ~ "2021-12-09",
+                              station_id == "Station65" ~ "2021-12-02",
+                              .default = pull_date)) 
+
 #########################################################################
 ##
 ## 3. Combine activity sheets for all years
@@ -215,6 +267,8 @@ vs_2022 <- read_csv("data/Camera_Data/all_species/SKOK/2022_2023/skok_viewsheds_
 
 ################################ 2021 #################################
 skok_act_2021 <- read_csv("data/Camera_Data/all_species/SKOK/2021/Act_sheet_2021_final.csv")
+
+
 
 #Create a key to translate between old and new deployment names
 loc_key_2021 <- skok_act_2021 %>% 
@@ -239,11 +293,12 @@ skok_act_2021_f <- skok_act_2021 %>%
          latitude = y,
          station_id=station,
          camera_id = cameras) %>% 
-  left_join(vs_2021, by = "station_id") %>% 
+  mutate(station_id =  str_replace(station_id,  "(\\D)(\\d)\\b", "\\10\\2")) %>% 
+  left_join(vs_2021_corrected, by = "station_id") %>% 
   relocate(c(set_date, pull_date, viewshed), .after = camera_id) %>%
-  mutate(station_id =  str_replace(station_id,  "(\\D)(\\d)\\b", "\\10\\2")) %>%
   merge_by_location() 
-  
+
+
 #check if the correct number of rows were returned
 nrow(skok_act_2021_f) == target_rows_2021
 
@@ -254,8 +309,8 @@ skok_act_2021_long <- skok_act_2021_f %>%
   mutate(act_date = str_remove_all(act_date, coll("x"))) %>% 
   mutate(act_date = str_replace_all(act_date, coll("_"), coll("/"))) %>% 
   mutate(act_date = mdy(act_date),
-         set_date = mdy_hm(set_date),
-         pull_date = mdy_hm(pull_date)) %>% 
+         set_date = ymd(set_date),
+         pull_date = ymd(pull_date)) %>% 
   group_by(station_id, longitude, latitude) %>% 
   mutate(status = case_when(act_date < date(set_date) ~ NA,
                             act_date > date(pull_date) ~ NA,
@@ -312,9 +367,21 @@ skok_act_2022_wide <- skok_act_2022 %>%
          pull_date = end_date) %>% 
   mutate(station_id = str_replace_all(station_id, coll("CAM"), coll("Station"))) %>% 
   left_join(vs_2022, by = c("station_id", "dep_year")) %>%
-  relocate(c(set_date, pull_date, viewshed), .after = latitude) %>% 
-  merge_by_location()
+  relocate(c(set_date, pull_date, viewshed), .after = latitude) %>%
+  merge_by_location() %>%
+  pivot_longer(-c(!matches("\\d")), names_to = "act_date", values_to = "status") %>% 
+  mutate(act_date = ymd(act_date)) %>% 
+  group_by(station_id, latitude, longitude) %>% 
+  mutate(status = case_when(act_date < date(set_date) ~ NA,
+                            act_date > date(pull_date) ~ NA,
+                            .default = status)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = act_date, values_from = status) 
 
+  
+# skok_act_2022_wide %>% 
+#   arrange(set_date) %>% 
+# select(c(station_id, matches("\\d"))) %>% column_to_rownames("station_id") %>%   as.matrix() %>% camtrapR:::camopPlot(lattice=TRUE)
 
 #check the number of distinct locations (for number of output rows)
 nrow(skok_act_2022_wide) == target_rows_2022
@@ -355,8 +422,20 @@ skok_act_2023_wide <- skok_act_2023 %>%
   mutate(station_id = str_replace_all(station_id, coll("CAM"), coll("Station"))) %>% 
   mutate(viewshed = NA) %>% 
   relocate(c(set_date, pull_date, viewshed), .after = latitude) %>% 
-  merge_by_location()
+  merge_by_location() %>% 
+  pivot_longer(-c(!matches("\\d")), names_to = "act_date", values_to = "status") %>% 
+  mutate(act_date = ymd(act_date)) %>% 
+  group_by(station_id, latitude, longitude) %>% 
+  mutate(status = case_when(act_date < date(set_date) ~ NA,
+                            act_date > date(pull_date) ~ NA,
+                            .default = status)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = act_date, values_from = status) 
 
+
+# skok_act_2023_wide %>%
+#   arrange(set_date) %>%
+# select(c(station_id, matches("\\d"))) %>% column_to_rownames("station_id") %>%   as.matrix() %>% camtrapR:::camopPlot(lattice=TRUE)
 
 #check the number of distinct locations (for number of output rows)
 nrow(skok_act_2023_wide) == target_rows_2023
@@ -412,10 +491,11 @@ skok_act_all_final_long <- skok_act_all_long_date_fill %>%
   mutate(status = case_when(status > 1 ~ 1,
                             .default = status))
 
+
 # #camera_level_test
 skok_act_all_final_long  %>%
   #filter(dep_year == "2023") %>% 
-  arrange(dep_year, station_id, act_date) %>% 
+  arrange(dep_year, set_date) %>% 
   select(deployment_id, act_date, status) %>% 
   pivot_wider(names_from = act_date, values_from = status) %>% 
   column_to_rownames("deployment_id") %>%
@@ -454,7 +534,7 @@ dep_key_2022_2023 <- skok_act_all_final_wide %>%
 ##########################################################################
 
 ################################ 2021 #################################
-skok_det_2021 <- read_csv("data/Camera_Data/all_species/SKOK/2021/SKOK.2021.Metadata.Complete.modified.csv") %>% 
+skok_det_2021 <- skok_det_2021  %>% 
   clean_names() %>% 
   select(source_name_1, date_time_10, species) %>%
   separate_wider_delim(source_name_1, delim = ".", names = c("station_id", "check")) %>%
@@ -504,10 +584,25 @@ skok_det_all_final <- skok_det_all %>%
                                .default = time)) %>% 
   mutate(timestamp = ymd_hms(timestamp)) %>% 
   mutate(timestamp = case_when(deployment_id == "SKOK_2023_SKOK77" ~ timestamp + years(1),
-         .default = timestamp)) %>% 
+                               deployment_id == "SKOK_2023_SKOK59" ~ timestamp + years(1),
+                               deployment_id == "SKOK_2022_SKOK17" & act_year == "2021" ~ timestamp + years(1),
+                               .default = timestamp)) %>% 
+  mutate(date = case_when(deployment_id == "SKOK_2023_SKOK77" ~ as.character(ymd(date) + years(1)),
+                          deployment_id == "SKOK_2023_SKOK59" ~ as.character(ymd(date) + years(1)),
+                          deployment_id == "SKOK_2022_SKOK17" & act_year == "2021" ~ as.character(ymd(date) + years(1)),
+                               .default = date)) %>% 
+  mutate(act_year = as.character(year(timestamp))) %>% 
   mutate(timestamp = as.character(timestamp)) %>% 
   mutate(timestamp = case_when(is.na(timestamp) ~ paste0(date, " ", time),
                                .default = timestamp)) 
+
+skok_det_all_final %>% filter(deployment_id=="SKOK_2023_SKOK62")
+skok_det_all_final <- skok_det_all_final %>% 
+  filter(!(deployment_id == "SKOK_2023_SKOK62" & act_year == "2020")) %>% 
+ mutate(timestamp = as.character(paste0(date, " ", time)))
+
+
+skok_det_all_final %>% mutate(timestamp = ymd_hms(timestamp))
 
 #workaround for parsing issue when timestamp is 00:00:00
 # skok_det_all_final %>% mutate(timestamp = ymd_hms(as.POSIXct(timestamp, format = "%Y-%m-%d %T"))) %>% filter(is.na(timestamp)) %>% View()
@@ -543,12 +638,13 @@ setdiff(det_stations, act_stations) #stations in det not in act
 
 
 skok_act_all_final_wide_mat <- skok_act_all_final_wide %>% 
+  arrange(set_date) %>% 
   select(-c(survey_id, station_id:dep_year)) %>% 
   column_to_rownames("deployment_id") %>% 
   as.matrix()
 
 test <- detectionHistory(skok_det_all_final,
-                         "Puma",
+                         "Mule Deer",
                          skok_act_all_final_wide_mat,
                          output = "binary",
                          stationCol = "deployment_id",
@@ -626,7 +722,7 @@ camtrapR:::camopPlot(plot_mat, lattice = TRUE)
 # write_csv(dep_key_2021, "data/Camera_Data/all_species/skok_deployment_key_2021.csv")
 # 
 # write_csv(dep_key_2022_2023, "data/Camera_Data/all_species/skok_deployment_key_2022_2023.csv")
-
+# 
 
 
 

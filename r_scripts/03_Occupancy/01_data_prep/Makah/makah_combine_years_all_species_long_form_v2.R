@@ -201,6 +201,7 @@ library(camtrapR)
 ################################ 2021 #################################
 makah_act_2021 <- read_csv("data/Camera_Data/all_species/MAKAH/2021/ActivitySheet_FINAL_2.1.22_Number2_edited.csv")
 
+
 #Create a key to translate between old and new deployment names
 makah_key_2021 <- makah_act_2021 %>% 
   clean_names() %>%
@@ -308,7 +309,7 @@ makah_act_all_final_long <- makah_act_all_long_date_fill %>%
 # #camera_level_test
 makah_act_all_final_long  %>%
   #filter(dep_year == "2019") %>% 
-  arrange(dep_year, station_id, act_date) %>% 
+  arrange(dep_year, set_date) %>% 
   select(deployment_id, act_date, status) %>% 
   pivot_wider(names_from = act_date, values_from = status) %>% 
   column_to_rownames("deployment_id") %>%
@@ -376,7 +377,9 @@ makah_dets_all_final <- makah_dets_all %>%
          act_year = year(timestamp)) %>% 
   mutate(timestamp = paste0(date, " ", time)) %>% 
   mutate(timestamp = as.character(timestamp)) %>% 
-  select(deployment_id, longitude, latitude, dep_year, act_year, species, timestamp, date, time)
+  select(deployment_id, longitude, latitude, dep_year, act_year, species, timestamp, date, time) %>% 
+  filter(act_year!= "2020")
+  
 
 makah_dets_all_final %>% 
   mutate(unique_id = 1:nrow(.)) %>% #filter(unique_id == 37010)
@@ -398,12 +401,13 @@ setdiff(det_stations, act_stations) #stations in det not in act
 
 
 makah_act_all_final_wide_mat <- makah_act_all_final_wide %>% 
+  arrange(set_date) %>% 
   select(-c(survey_id, station_id:dep_year)) %>% 
   column_to_rownames("deployment_id") %>% 
   as.matrix()
 
 test <- detectionHistory(makah_dets_all_final,
-                         "Cougar",
+                         "Deer",
                          makah_act_all_final_wide_mat,
                          output = "binary",
                          stationCol = "deployment_id",
@@ -480,7 +484,7 @@ camtrapR:::camopPlot(det_hist, lattice = TRUE)
 # 
 # write_csv(makah_act_all_final_wide, "data/Camera_Data/all_species/makah_cam_act_2021_wide.csv")
 # 
-#write_csv(makah_dets_all_final, "data/Camera_Data/all_species/makah_detections_all_species_2021.csv")
+# write_csv(makah_dets_all_final, "data/Camera_Data/all_species/makah_detections_all_species_2021.csv")
 # 
 # write_csv(dep_key, "data/Camera_Data/all_species/makah_deployment_key_2021.csv")
 

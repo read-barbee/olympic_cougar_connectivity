@@ -413,6 +413,7 @@ cam_act_long_final <- cam_act_f3 %>%
 
 cam_act_plot_obj <- cam_act_long_final %>% 
   pivot_wider(names_from = act_date, values_from = status) %>% 
+  arrange(dep_year, set_date) %>% 
   select(-c(survey_id, station_id:dep_year)) %>% 
   column_to_rownames("deployment_id") %>% 
   as.matrix()
@@ -469,10 +470,10 @@ cam_act_wide <- cam_act_long_final %>%
 
 #write_csv(cam_act_final, "data/Camera_Data/Olympic_National_Park/cam_act/onp_fisher_2013_2016_cam_act_10-11-23.csv")
 
-act_mat_long <- cam_act_final  %>% 
-  pivot_longer(cols= -c(station_id:cell_id), names_to = "date", values_to = "cam_status") %>% 
-  mutate(date = ymd(date)) %>% 
-  unite("station_id", c(hex_id, station_num, year), sep = "_", remove = TRUE)
+# act_mat_long <- cam_act_final  %>% 
+#   pivot_longer(cols= -c(station_id:cell_id), names_to = "date", values_to = "cam_status") %>% 
+#   mutate(date = ymd(date)) %>% 
+#   unite("station_id", c(hex_id, station_num, year), sep = "_", remove = TRUE)
 
 #########################################################################
 ##
@@ -598,7 +599,8 @@ species_det_f2 <- species_det_f %>%
 
 species_det_f2 %>% filter(is.na(latitude))
 
-species_det_final <- species_det_f2
+species_det_final <- species_det_f2 %>% 
+  filter(!(deployment_id=="ONP_171_1_2013" & timestamp > ymd("2013-11-05")))
 
 ###############################################################################
 
@@ -608,12 +610,13 @@ species_det_final <- species_det_f2
 
 
 onp_act_all_final_wide_mat <- cam_act_wide %>% 
+  arrange(dep_year, set_date) %>% 
   select(-c(survey_id, station_id:dep_year)) %>% 
   column_to_rownames("deployment_id") %>% 
   as.matrix()
 
 test <- detectionHistory(species_det_final,
-                         "Cougar",
+                         "Black_tailed_deer",
                          onp_act_all_final_wide_mat,
                          output = "binary",
                          stationCol = "deployment_id",
@@ -692,6 +695,6 @@ camtrapR:::camopPlot(plot_mat, lattice = TRUE)
 # write_csv(cam_act_wide, "data/Camera_Data/all_species/onp_cam_act_2013-2016_wide.csv")
 # 
 # write_csv(species_det_final, "data/Camera_Data/all_species/onp_detections_all_species_2013-2016.csv")
-# 
+
 
 

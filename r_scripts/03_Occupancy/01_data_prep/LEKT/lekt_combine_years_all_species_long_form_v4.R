@@ -731,6 +731,14 @@ lekt_dets_all_final <- lekt_dets_all %>%
   mutate(time = case_when(is.na(time) ~ "00:00:00",
                           .default = time)) %>% 
   mutate(timestamp = paste0(date, " ", time))
+
+#get rid of one human record before recorded start date at one deployment
+lekt_dets_all_final <- lekt_dets_all_final %>% 
+  filter(!(deployment_id == "LEKT_2019_LEKT33" &
+             species == "Human" &
+             timestamp < ymd("2019-07-18"))) %>% 
+  mutate(act_year = as.character(act_year))
+  
   
 #lekt_dets_all_final %>% mutate(timestamp = ymd_hms(timestamp))
 
@@ -839,7 +847,7 @@ camtrapR:::camopPlot(plot_mat, lattice = TRUE)
 # #
 # write_csv(lekt_act_all_final_wide, "data/Camera_Data/all_species/lekt_cam_act_2019_2023_wide.csv")
 # 
-# write_csv(lekt_dets_all_final, "data/Camera_Data/all_species/lekt_detections_all_species_2019-2023.csv")
+#write_csv(lekt_dets_all_final, "data/Camera_Data/all_species/lekt_detections_all_species_2019-2023.csv")
 # 
 # write_csv(dep_key, "data/Camera_Data/all_species/lekt_deployment_key_2019-2023.csv")
 
