@@ -161,7 +161,7 @@ fill_jdays <- function(data){
 }
 
 
-#make activity matrix from STE format deployment dates
+#make activity matrix from Wildlife Insights format deployment dates
 dep_to_matrix <- function(data){
   
   min_date <- min(data$start_date)
@@ -174,15 +174,10 @@ dep_to_matrix <- function(data){
     mutate(
       # Create a logical vector: TRUE if the date is between start and end, otherwise FALSE
       date_vector = list(as.numeric(date_seq >= start_date & date_seq <= end_date))
-    ) %>%
+    ) %>% 
     unnest_wider(date_vector, names_sep = "_") %>%
-    ungroup()
-  
-  # Replace 0 with NA
-  date_matrix[date_matrix == 0] <- NA
-  
-  #rename_columns
-  date_matrix <- date_matrix %>% rename_with(.cols=-c(!matches("\\d")), function(x){as.character(date_seq)})
+    ungroup() %>% 
+    rename_with(.cols=-c(!matches("\\d")), function(x){as.character(date_seq)}) 
   
   return(date_matrix)
 }
@@ -262,8 +257,20 @@ pnptc_act_2020_f <- pnptc_act_2020_locs %>%
   rename(set_date = start_date,
          pull_date = end_date) %>% 
   merge_by_location() %>% 
+  pivot_longer(-c(!matches("\\d")), names_to = "act_date", values_to = "status") %>% 
+  mutate(act_date = ymd(act_date)) %>% 
+  group_by(station_id, latitude, longitude) %>% 
+  mutate(status = case_when(act_date < date(set_date) ~ NA,
+                            act_date > date(pull_date) ~ NA,
+                            .default = status)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = act_date, values_from = status) %>% 
   mutate(station_id = paste0("PNPTC_", station_id))
 
+
+# pnptc_act_2020_f %>%
+#   arrange(set_date) %>%
+# select(c(station_id, matches("\\d"))) %>% column_to_rownames("station_id") %>%   as.matrix() %>% camtrapR:::camopPlot(lattice=TRUE)
 
 
 #check if the correct number of rows were returned
@@ -336,6 +343,11 @@ pnptc_act_2021_wide <- pnptc_act_2021_f %>%
 #check if the correct number of rows were returned
 nrow(pnptc_act_2021_wide) == target_rows_2021
 
+#Internal NA values for FS02 actually encoded in the activity sheet dylan sent me
+# pnptc_act_2021_wide %>%
+#   arrange(set_date) %>%
+# select(c(station_id, matches("\\d"))) %>% column_to_rownames("station_id") %>%   as.matrix() %>% camtrapR:::camopPlot(lattice=TRUE)
+
 
 pnptc_act_2021_long <- pnptc_act_2021_wide %>% 
   select(-rows_merged) %>% 
@@ -391,8 +403,20 @@ pnptc_act_2022_f <- pnptc_act_2022_locs %>%
   rename(set_date = start_date,
          pull_date = end_date) %>% 
   merge_by_location() %>%
+  pivot_longer(-c(!matches("\\d")), names_to = "act_date", values_to = "status") %>% 
+  mutate(act_date = ymd(act_date)) %>% 
+  group_by(station_id, latitude, longitude) %>% 
+  mutate(status = case_when(act_date < date(set_date) ~ NA,
+                            act_date > date(pull_date) ~ NA,
+                            .default = status)) %>% 
+  ungroup() %>%
+  pivot_wider(names_from = act_date, values_from = status) %>%
   mutate(station_id = paste0("PNPTC_", station_id))
 
+#weird that FS55 extends so far into 2023, but it has detection records to back it up
+# pnptc_act_2022_f %>%
+#   arrange(set_date) %>%
+# select(c(station_id, matches("\\d"))) %>% column_to_rownames("station_id") %>%   as.matrix() %>% camtrapR:::camopPlot(lattice=TRUE)
 
 
 #check if the correct number of rows were returned
@@ -462,8 +486,8 @@ pnptc_act_all_final_long <- pnptc_act_all_long_date_fill %>%
 
 # #camera_level_test
 pnptc_act_all_final_long  %>%
-  #filter(dep_year == "2019") %>% 
-  arrange(dep_year, station_id, act_date) %>% 
+  #filter(dep_year == "2021") %>% 
+  arrange(dep_year, set_date) %>% 
   select(deployment_id, act_date, status) %>% 
   pivot_wider(names_from = act_date, values_from = status) %>% 
   column_to_rownames("deployment_id") %>%
@@ -600,10 +624,13 @@ pnptc_dets_all_final <- pnptc_dets_all %>%
   mutate(act_year = year(ymd_hms(timestamp))) %>% 
   select(deployment_id, longitude, latitude, dep_year, act_year, species, timestamp, date, time)
 
-#pnptc_dets_all_final %>% filter(deployment_id == "PNPTC_2021_PNPTC_FS41") %>% View()
+pnptc_dets_all_final <- pnptc_dets_all_final %>% 
+  filter(!(deployment_id== "PNPTC_2022_PNPTC_FS55" & act_year == "2023"))
+
+pnptc_dets_all_final %>% filter(deployment_id == "PNPTC_2022_PNPTC_FS55") %>% View()
 
 
-  pnptc_dets_all_final %>% mutate(timestamp = ymd_hms(timestamp)) %>% filter(is.na(timestamp))
+pnptc_dets_all_final %>% mutate(timestamp = ymd_hms(timestamp)) %>% filter(is.na(timestamp))
 
 #check for mismatches between deployment ids in detection and activty history frames
 det_stations <- pnptc_dets_all_final %>% distinct(deployment_id) %>% pull(deployment_id)
@@ -615,6 +642,8 @@ setdiff(det_stations, act_stations) #stations in det not in act
 
 #"PNPTC_2020_PNPTC_DNR93" is in the detection file but legitimately has no species detections in the file. 
 
+
+
 ###############################################################################
 
 #6. Test the camtrapR detectionHistory function using the new frames
@@ -622,13 +651,14 @@ setdiff(det_stations, act_stations) #stations in det not in act
 ###############################################################################
 
 
-pnptc_act_all_final_wide_mat <- pnptc_act_all_final_wide %>% 
+pnptc_act_all_final_wide_mat <- pnptc_act_all_final_wide %>%
+  arrange(set_date) %>% 
   select(-c(survey_id, station_id:dep_year)) %>% 
   column_to_rownames("deployment_id") %>% 
   as.matrix()
 
 test <- detectionHistory(pnptc_dets_all_final,
-                         "Puma",
+                         "Deer",
                          pnptc_act_all_final_wide_mat,
                          output = "binary",
                          stationCol = "deployment_id",
@@ -706,10 +736,10 @@ camtrapR:::camopPlot(plot_mat, lattice = TRUE)
 # 
 # write_csv(pnptc_act_all_final_wide, "data/Camera_Data/all_species/pnptc_cam_act_2020_2022_wide.csv")
 # 
- #write_csv(pnptc_dets_all_final, "data/Camera_Data/all_species/pnptc_detections_all_species_2020-2022.csv")
+# write_csv(pnptc_dets_all_final, "data/Camera_Data/all_species/pnptc_detections_all_species_2020-2022.csv")
 # 
 # write_csv(dep_key2, "data/Camera_Data/all_species/pnptc_deployment_key_2010-2022.csv")
-
+# 
 
 
 
